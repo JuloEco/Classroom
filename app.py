@@ -22,6 +22,51 @@ app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 
 
 db = SQLAlchemy(app)
 
+# ----------------------------------------------------
+# FILTRE JINJA : rendu léger du Markdown généré par generate_ai_summary()
+# (sinon les ** et ` s'affichent tels quels dans la page, non interprétés)
+# ----------------------------------------------------
+import re
+from markupsafe import Markup, escape
+
+def _inline_markdown(escaped_line: str) -> str:
+    escaped_line = re.sub(r'\*\*(.+?)\*\*', r'<strong class="text-white font-semibold">\1</strong>', escaped_line)
+    escaped_line = re.sub(
+        r'`(.+?)`',
+        r'<code class="px-1 py-0.5 rounded bg-indigo-900/70 text-indigo-200 text-[11px]">\1</code>',
+        escaped_line
+    )
+    return escaped_line
+
+def markdown_lite(text):
+    """Convertit le Markdown léger produit par generate_ai_summary() (gras, code, puces)
+    en HTML, pour éviter d'afficher les ** et ` tels quels dans la page."""
+    if not text:
+        return ""
+    html_parts = []
+    in_list = False
+    for raw_line in text.split('\n'):
+        stripped = raw_line.strip()
+        if stripped.startswith('- '):
+            if not in_list:
+                html_parts.append('<ul class="list-disc ml-5 space-y-0.5">')
+                in_list = True
+            content = _inline_markdown(str(escape(stripped[2:])))
+            html_parts.append(f'<li>{content}</li>')
+            continue
+        if in_list:
+            html_parts.append('</ul>')
+            in_list = False
+        if stripped == '':
+            html_parts.append('<div class="h-2"></div>')
+        else:
+            html_parts.append(f'<p>{_inline_markdown(str(escape(raw_line)))}</p>')
+    if in_list:
+        html_parts.append('</ul>')
+    return Markup(''.join(html_parts))
+
+app.jinja_env.filters['markdown_lite'] = markdown_lite
+
 # Création du dossier d'upload s'il n'existe pas
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
