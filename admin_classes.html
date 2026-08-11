@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">🛠️ Panel Admin : Inscriptions</h1>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+    <div class="bg-white p-6 rounded-xl border border-gray-200">
+        <h2 class="font-bold mb-4">🏫 Étape 1 : Créer un Groupe</h2>
+        <form method="POST" class="space-y-4">
+            <input type="hidden" name="create_classroom" value="1">
+            <input type="text" name="classname" placeholder="Nom de la classe" class="w-full p-2 border rounded-lg" required>
+            <button class="w-full bg-indigo-600 text-white py-2 rounded-lg text-sm font-semibold">Créer</button>
+        </form>
+    </div>
+    <div class="bg-white p-6 rounded-xl border border-gray-200">
+        <h2 class="font-bold mb-4">👤 Étape 2 : Inscrire un élève / prof</h2>
+        <form method="POST" class="space-y-4">
+            <input type="hidden" name="assign_user" value="1">
+            <select name="user_id" class="w-full p-2 border rounded-lg">
+                {% for u in users %}<option value="{{ u.id }}">{{ u.username }} ({{ u.role }})</option>{% endfor %}
+            </select>
+            <select name="classroom_id" class="w-full p-2 border rounded-lg">
+                {% for c in classes %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+            </select>
+            <button class="w-full bg-emerald-600 text-white py-2 rounded-lg text-sm font-semibold">Associer</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
