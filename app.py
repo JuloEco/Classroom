@@ -13,6 +13,8 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'zip', 'py'}
 
 db = SQLAlchemy(app)
+with app.app_context():
+    init_db()
 
 # Création du dossier d'upload s'il n'existe pas
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
