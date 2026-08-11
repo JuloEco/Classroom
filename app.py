@@ -199,7 +199,12 @@ class MergeRequest(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(20), default='open') # 'open', 'merged', 'closed'
     ai_summary = db.Column(db.Text, nullable=True)     # Résumé IA du diff
-    
+
+    # Instantanés du code au moment de la fusion, pour que le diff affiché
+    # reste correct même après que target_branch.latest_code ait été écrasé.
+    snapshot_target_code = db.Column(db.Text, nullable=True)
+    snapshot_source_code = db.Column(db.Text, nullable=True)
+
     repo_id = db.Column(db.Integer, db.ForeignKey('repo.id'), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
@@ -1017,7 +1022,13 @@ def view_merge_request(mr_id):
             return redirect(url_for('view_merge_request', mr_id=mr.id))
 
     # Calcul du Diff
-    diff_data = generate_diff(mr.target_branch.latest_code, mr.source_branch.latest_code)
+    # Une fois fusionnée, target_branch.latest_code == source_branch.latest_code
+    # (voir execute_merge), donc on rejoue le diff à partir de l'instantané
+    # figé au moment de la fusion plutôt que sur l'état actuel des branches.
+    if mr.status == 'merged' and mr.snapshot_target_code is not None:
+        diff_data = generate_diff(mr.snapshot_target_code, mr.snapshot_source_code)
+    else:
+        diff_data = generate_diff(mr.target_branch.latest_code, mr.source_branch.latest_code)
     
     comments = MergeComment.query.filter_by(mr_id=mr.id).order_by(MergeComment.timestamp.asc()).all()
     
@@ -1035,6 +1046,11 @@ def execute_merge(mr_id):
         flash('Cette demande est déjà fermée ou fusionnée.', 'warning')
         return redirect(url_for('view_merge_request', mr_id=mr.id))
         
+    # On fige l'état des deux branches AVANT la copie, pour garder un diff
+    # exploitable après coup (sinon target == source et le diff devient vide).
+    mr.snapshot_target_code = mr.target_branch.latest_code
+    mr.snapshot_source_code = mr.source_branch.latest_code
+
     # Copie du code de la branche source vers la branche cible
     mr.target_branch.latest_code = mr.source_branch.latest_code
     mr.status = 'merged'
