@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="max-w-2xl mx-auto pt-4">
+    <div class="mb-6">
+        <a href="{{ url_for('forge', repo_id=repo.id) }}" class="text-xs text-indigo-600 hover:underline font-semibold">&larr; Retour à {{ repo.name }}</a>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">🔀 Nouvelle demande de fusion</h1>
+        <p class="text-sm text-gray-500 mt-0.5">Proposez de fusionner le code d'une branche vers une autre, avec diff et résumé IA automatiques.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('create_merge_request', repo_id=repo.id) }}" class="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-4">
+
+        <div>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Titre</label>
+            <input type="text" name="title" required placeholder="Ex : Ajout de la fonction de tri" class="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Description (optionnel)</label>
+            <textarea name="description" rows="3" placeholder="Détaillez le contexte de vos modifications..." class="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-700 uppercase mb-1">🌱 Branche source</label>
+                <select name="source_branch_id" required class="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                    {% for b in branches %}
+                    <option value="{{ b.id }}">{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[10px] text-gray-400 mt-1">Contient les nouvelles modifications</p>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-700 uppercase mb-1">🎯 Branche cible</label>
+                <select name="target_branch_id" required class="w-full p-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-mono">
+                    {% for b in branches %}
+                    <option value="{{ b.id }}" {% if b.name == 'main' %}selected{% endif %}>{{ b.name }}</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[10px] text-gray-400 mt-1">Recevra les modifications</p>
+            </div>
+        </div>
+
+        <div class="pt-3 border-t border-gray-100 flex justify-end gap-2">
+            <a href="{{ url_for('forge', repo_id=repo.id) }}" class="px-4 py-2 rounded-lg text-xs font-bold text-gray-600 hover:bg-gray-100 transition">Annuler</a>
+            <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-5 py-2 rounded-lg transition shadow-sm">
+                Créer la demande 🔀
+            </button>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

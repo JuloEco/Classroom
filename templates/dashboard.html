@@ -1,0 +1,246 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="mb-8">
+    <h1 class="text-3xl font-bold text-gray-900">Bonjour, {{ username }} ! 👋</h1>
+    <p class="text-gray-600 mt-1">Ravi de vous revoir sur votre espace numérique de travail (Rôle : <span class="capitalize font-semibold text-indigo-600">{{ role }}</span>).</p>
+</div>
+
+<!-- Grille des fonctionnalités -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    
+    <!-- Carte 1 : Les Cours -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between hover:shadow-md transition">
+        <div>
+            <div class="w-12 h-12 bg-blue-100 text-blue-600 flex items-center justify-center rounded-lg mb-4 text-2xl">📚</div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Espace Cours</h3>
+            <p class="text-gray-600 text-sm mb-4">
+                {% if role == 'prof' %}
+                    Publiez de nouveaux chapitres, modifiez vos leçons et mettez des ressources à disposition.
+                {% else %}
+                    Consultez les leçons partagées par vos enseignants et révisez vos chapitres.
+                {% endif %}
+            </p>
+        </div>
+        <a href="/cours" class="block text-center bg-blue-50 text-blue-600 hover:bg-blue-100 font-semibold py-2 rounded-lg transition text-sm">
+            Accéder aux cours
+        </a>
+    </div>
+
+    <!-- Carte 2 : Les Devoirs & Notes -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between hover:shadow-md transition">
+        <div>
+            <div class="w-12 h-12 bg-green-100 text-green-600 flex items-center justify-center rounded-lg mb-4 text-2xl">📝</div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Devoirs & Évaluations</h3>
+            <p class="text-gray-600 text-sm mb-4">
+                {% if role == 'prof' %}
+                    Créez des devoirs, téléchargez les fichiers rendus par vos élèves et attribuez les notes.
+                {% else %}
+                    Déposez vos fichiers de devoirs, suivez les dates limites et consultez vos notes.
+                {% endif %}
+            </p>
+        </div>
+        <a href="/devoirs" class="block text-center bg-green-50 text-green-600 hover:bg-green-100 font-semibold py-2 rounded-lg transition text-sm">
+            Voir les devoirs
+        </a>
+    </div>
+
+    <!-- Carte 3 : La Messagerie -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between hover:shadow-md transition">
+        <div>
+            <div class="w-12 h-12 bg-purple-100 text-purple-600 flex items-center justify-center rounded-lg mb-4 text-2xl">💬</div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Messagerie</h3>
+            <p class="text-gray-600 text-sm mb-4">
+                {% if role == 'prof' %}
+                    Discutez en privé avec vos élèves, répondez à leurs questions et guidez-les individuellement.
+                {% else %}
+                    Posez vos questions en direct à votre professeur et échangez sur vos blocages.
+                {% endif %}
+            </p>
+        </div>
+        <a href="/messagerie" class="block text-center bg-purple-50 text-purple-600 hover:bg-purple-100 font-semibold py-2 rounded-lg transition text-sm">
+            Ouvrir la messagerie
+        </a>
+    </div>
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 flex flex-col justify-between hover:shadow-md transition">
+        <div>
+            <div class="w-12 h-12 bg-amber-100 text-amber-600 flex items-center justify-center rounded-lg mb-4 text-2xl">🧠</div>
+            <h3 class="text-xl font-bold text-gray-800 mb-2">Cartes Mentales</h3>
+            <p class="text-gray-600 text-sm mb-4">
+                Construisez des diagrammes et des arbres d'idées interactifs pour résumer vos cours et réviser efficacement.
+            </p>
+        </div>
+        <a href="{{ url_for('mindmaps') }}" class="block text-center bg-amber-50 text-amber-600 hover:bg-amber-100 font-semibold py-2 rounded-lg transition text-sm">
+            Ouvrir les cartes mentales
+        </a>
+    </div>
+    <!-- ESPACE : PROJETS GUIDÉS -->
+<div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between relative overflow-hidden group">
+    <!-- Petit effet visuel néon discret au survol propre à tes goûts -->
+    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+    
+    <div>
+        <!-- En-tête de la carte avec Badge -->
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-emerald-50 text-emerald-600 flex items-center justify-center rounded-xl text-2xl shadow-sm border border-emerald-100">
+                🚀
+            </div>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                🧠📝💻 Actif
+            </span>
+        </div>
+
+        <!-- Titre & Description -->
+        <h3 class="text-lg font-bold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors">
+            Projets Guidés
+        </h3>
+        <p class="text-xs text-gray-500 font-medium mb-4">
+            Mode Campagne Pas à Pas
+        </p>
+        <p class="text-sm text-gray-600 leading-relaxed mb-6">
+            Apprenez en faisant ! Écrivez du code Python pour résoudre des missions concrètes étape par étape. Le système valide automatiquement vos scripts en temps réel.
+        </p>
+    </div>
+
+    <!-- Bouton d'action -->
+    <a href="{{ url_for('projets_guides') }}" class="w-full inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-indigo-600 hover:text-white text-gray-700 font-semibold text-sm py-2.5 px-4 rounded-xl border border-gray-200 hover:border-indigo-600 transition-all shadow-sm">
+        <span>Lancer une mission</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+    </a>
+</div>
+<div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between relative overflow-hidden group">
+    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+    <div>
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-amber-50 text-amber-600 flex items-center justify-center rounded-xl text-2xl shadow-sm border border-amber-100">
+                🃏
+            </div>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-100">
+                ⚡ Automatismes
+            </span>
+        </div>
+        <h3 class="text-lg font-bold text-gray-800 mb-1 group-hover:text-indigo-600 transition-colors">
+            Flashcards Flash
+        </h3>
+        <p class="text-xs text-gray-500 font-medium mb-4">
+            Échauffement & Mémorisation
+        </p>
+        <p class="text-sm text-gray-600 leading-relaxed mb-6">
+            Entraînez-vous à décoder la syntaxe Python instantanément. Idéal pour une révision rapide en famille avant de se lancer dans un projet de code.
+        </p>
+    </div>
+    <a href="{{ url_for('flashcards') }}" class="w-full inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-indigo-600 hover:text-white text-gray-700 font-semibold text-sm py-2.5 px-4 rounded-xl border border-gray-200 hover:border-indigo-600 transition-all shadow-sm">
+        <span>Ouvrir la boîte</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+    </a>
+</div>
+<div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between relative overflow-hidden group">
+    <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-orange-500 to-slate-700 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+    
+    <div>
+        <div class="flex items-center justify-between mb-4">
+            <div class="w-12 h-12 bg-orange-50 text-orange-600 flex items-center justify-center rounded-xl text-2xl shadow-sm border border-orange-100">
+                🦊
+            </div>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                v1.0 Versioning
+            </span>
+        </div>
+
+        <h3 class="text-lg font-bold text-gray-800 mb-1 group-hover:text-orange-600 transition-colors">
+            La Forge à Code
+        </h3>
+        <p class="text-xs text-gray-500 font-medium mb-4">
+            Gestion de Versions & Historique
+        </p>
+        <p class="text-sm text-gray-600 leading-relaxed mb-6">
+            Comme des vrais pros ! Créez vos dépôts, effectuez des commits commentés pour sauvegarder vos scripts et voyagez dans le temps pour restaurer votre code si tout est cassé.
+        </p>
+    </div>
+
+    <a href="{{ url_for('forge') }}" class="w-full inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-slate-800 hover:text-white text-gray-700 font-semibold text-sm py-2.5 px-4 rounded-xl border border-gray-200 hover:border-slate-800 transition-all shadow-sm">
+        <span>Ouvrir mes dépôts</span>
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+        </svg>
+    </a>
+</div>
+<div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition flex flex-col justify-between">
+    <div>
+        <div class="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 mb-4 border border-emerald-100">
+            <span class="text-xl">🧪</span>
+        </div>
+        <h3 class="text-sm font-bold text-gray-900 mb-1">Bac à Sable Python</h3>
+        <p class="text-xs text-gray-500 leading-relaxed">
+            Un espace d'expérimentation isolé pour tester des algorithmes, manipuler des fonctions et observer le résultat instantanément.
+        </p>
+    </div>
+    <div class="mt-5">
+        <a href="{{ url_for('sandbox') }}" class="inline-flex items-center justify-center w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold py-2 px-4 rounded-lg transition">
+            Ouvrir la Sandbox →
+        </a>
+    </div>
+</div>
+<div class="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition duration-200 flex flex-col justify-between relative overflow-hidden group">
+        <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-200"></div>
+        <div>
+            <div class="flex items-center justify-between mb-4">
+                <div class="w-12 h-12 bg-cyan-50 text-cyan-600 flex items-center justify-center rounded-xl text-2xl shadow-sm border border-cyan-100">🏫</div>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-100">Gestion</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-1 group-hover:text-cyan-600 transition-colors">Mes Classes & Groupes</h3>
+            <p class="text-xs text-gray-500 font-medium mb-3">Suivi des effectifs</p>
+            
+            <div class="text-sm text-gray-600 mb-6">
+                {% if role == 'prof' %}
+                    <p class="mb-2 font-medium text-gray-700">Vos élèves actifs par groupe :</p>
+                    <div class="space-y-3 max-h-[120px] overflow-y-auto pr-1">
+                        {% for classe in user_classes %}
+                            <div class="p-2 bg-slate-50 rounded-lg border border-slate-100">
+                                <p class="text-xs font-bold text-indigo-600 mb-1">🔹 {{ classe.name }}</p>
+                                <ul class="text-[11px] text-gray-500 list-disc list-inside space-y-0.5">
+                                    {% for student in classe.students %}
+                                        <li>{{ student.username }}</li>
+                                    {% else %}
+                                        <li class="italic text-gray-400">Aucun élève inscrit</li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% else %}
+                            <p class="text-xs italic text-gray-400">Aucune classe gérée pour le moment.</p>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="mb-2 font-medium text-gray-700">Mes camarades de classe :</p>
+                    <div class="space-y-2 max-h-[120px] overflow-y-auto pr-1">
+                        {% for classe in user_classes %}
+                            <div class="p-2 bg-slate-50 rounded-lg border border-slate-100 text-[11px]">
+                                <span class="font-semibold text-cyan-600 block mb-1">{{ classe.name }}</span>
+                                <div class="flex flex-wrap gap-1">
+                                    {% for student in classe.students %}
+                                        {% if student.username != username %}
+                                            <span class="bg-white border px-1.5 py-0.5 rounded text-gray-600">👤 {{ student.username }}</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        {% else %}
+                            <p class="text-xs italic text-gray-400">Vous n'êtes inscrit dans aucun groupe.</p>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <a href="{{ url_for('mes_classes') }}" class="w-full inline-flex items-center justify-center gap-2 bg-gray-50 hover:bg-cyan-600 hover:text-white text-gray-700 font-semibold text-sm py-2.5 px-4 rounded-xl border border-gray-200 hover:border-cyan-600 transition-all shadow-sm">
+            <span>Détails du groupe</span>
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 transition-transform group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+        </a>
+    </div>
+</div>
+{% endblock %}

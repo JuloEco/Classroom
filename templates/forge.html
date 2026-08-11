@@ -1,0 +1,273 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="max-w-7xl mx-auto pt-4">
+    <div class="flex items-center justify-between border-b border-gray-200 pb-4 mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-gray-900">🦊 Ma Forge à Code (Mini-GitLab)</h1>
+            <p class="text-sm text-gray-500 mt-0.5">Gérez vos versions, sauvegardez vos scripts et collaborez en famille.</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[620px]">
+        
+        <div class="lg:col-span-1 bg-white p-4 rounded-xl border border-gray-200 flex flex-col justify-between overflow-y-auto">
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-2 mb-2">📁 Mes Projets</h3>
+                    <ul class="space-y-1 text-xs">
+                        {% for r in repos %}
+                        <li>
+                            <a href="{{ url_for('forge', repo_id=r.id) }}" class="block p-2 rounded-lg font-semibold {% if selected_repo and selected_repo.id == r.id %}bg-indigo-50 text-indigo-900 border border-indigo-100{% else %}bg-gray-50 text-gray-700 hover:bg-gray-100{% endif %}">
+                                📦 {{ r.name }} {% if r.visibility == 'public' %}🌐{% endif %}
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider border-b border-gray-100 pb-2 mb-2">🌐 Partagés avec moi</h3>
+                    {% if not repos_partages %}
+                        <p class="text-[11px] text-gray-400 italic">Aucun projet partagé pour le moment.</p>
+                    {% else %}
+                        <ul class="space-y-1 text-xs">
+                            {% for r in repos_partages %}
+                            <li>
+                                <a href="{{ url_for('forge', repo_id=r.id) }}" class="block p-2 rounded-lg font-semibold {% if selected_repo and selected_repo.id == r.id %}bg-emerald-50 text-emerald-900 border border-emerald-100{% else %}bg-gray-50 text-gray-700 hover:bg-gray-100{% endif %}">
+                                    🤝 {{ r.name }} <span class="text-[10px] text-gray-400 font-normal">({{ r.user.username }})</span>
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    {% endif %}
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('forge') }}" class="border-t border-gray-100 pt-4 mt-4 space-y-2">
+                <input type="hidden" name="create_repo" value="1">
+                <h4 class="text-xs font-bold text-gray-700 uppercase">🆕 Nouveau Projet</h4>
+                <input type="text" name="name" placeholder="Nom du projet..." required class="w-full p-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-1.5 rounded-lg text-xs transition">Créer</button>
+            </form>
+        </div>
+
+        <div class="lg:col-span-3 h-full min-h-0">
+            {% if not selected_repo %}
+                <div class="bg-white rounded-xl border border-gray-200 p-8 text-center h-full flex flex-col justify-center">
+                    <p class="text-gray-500 italic text-sm">Sélectionnez un projet ou créez-en un nouveau pour ouvrir l'espace de travail.</p>
+                </div>
+            {% else %}
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-full min-h-0">
+                    
+                    <div class="lg:col-span-3 flex flex-col gap-4 h-full min-h-0">
+                        <form method="POST" action="{{ url_for('forge') }}" class="flex flex-col flex-grow min-h-0 bg-slate-900 rounded-xl p-4 shadow-md relative">
+                            <input type="hidden" name="push_code" value="1">
+                            <input type="hidden" name="repo_id" value="{{ selected_repo.id }}">
+                            <input type="hidden" name="branch_id" value="{{ selected_branch.id if selected_branch else '' }}">
+                            
+                            <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2 gap-2 flex-wrap">
+                                <span class="text-xs font-mono text-slate-400">💻 main.py ({{ selected_repo.name }})</span>
+                                <div class="flex items-center gap-2">
+                                    {% if branches|length > 1 %}
+                                    <select onchange="location.href=this.value" class="bg-slate-800 border border-slate-700 text-emerald-400 text-[11px] font-mono rounded-lg px-2 py-1 outline-none">
+                                        {% for b in branches %}
+                                        <option value="{{ url_for('forge', repo_id=selected_repo.id, branch_id=b.id) }}" {% if selected_branch and b.id == selected_branch.id %}selected{% endif %}>🌱 {{ b.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% elif selected_branch %}
+                                    <span class="text-xs font-mono text-emerald-400">🌱 {{ selected_branch.name }}</span>
+                                    {% endif %}
+                                    {% if selected_repo.user_id != session['user_id'] %}
+                                        <span class="text-xs bg-emerald-950 text-emerald-400 px-2 py-0.5 rounded font-mono border border-emerald-800">Mode Lecture Seule 🤝</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <textarea name="code" id="code-editor" {% if selected_repo.user_id != session['user_id'] %}readonly{% endif %} class="w-full flex-grow min-h-0 bg-slate-950 text-emerald-400 font-mono text-xs p-3 rounded-lg outline-none resize-none border border-slate-800 focus:border-indigo-500" spellcheck="false">{{ selected_branch.latest_code if selected_branch else "# Pas encore de code poussé !" }}</textarea>
+                            
+                            {% if selected_repo.user_id == session['user_id'] %}
+                            <div class="mt-4 pt-3 border-t border-slate-800 flex gap-2">
+                                <input type="text" name="message" required placeholder="📝 Message de commit (ex: correction bug)" class="flex-grow bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500">
+                                <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-1.5 rounded-lg transition">Push 🚀</button>
+                            </div>
+                            {% endif %}
+                        </form>
+                    </div>
+
+                    <div class="lg:col-span-1 flex flex-col gap-4 h-full min-h-0 overflow-y-auto">
+                        
+                        {% if selected_repo.user_id == session['user_id'] %}
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                            <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-1.5 mb-3">⚙️ Partage</h3>
+                            <form method="POST" action="{{ url_for('forge') }}" class="space-y-3">
+                                <input type="hidden" name="update_visibility" value="1">
+                                <input type="hidden" name="repo_id" value="{{ selected_repo.id }}">
+                                
+                                <div class="space-y-1.5">
+                                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                                        <input type="radio" name="visibility" value="private" onclick="toggleShareList(true)" {% if selected_repo.visibility == 'private' %}checked{% endif %} class="text-indigo-600 focus:ring-indigo-500">
+                                        🔒 Privé / Ciblé
+                                    </label>
+                                    <label class="flex items-center gap-2 text-xs font-semibold text-gray-700 cursor-pointer">
+                                        <input type="radio" name="visibility" value="public" onclick="toggleShareList(false)" {% if selected_repo.visibility == 'public' %}checked{% endif %} class="text-indigo-600 focus:ring-indigo-500">
+                                        🌐 Tout le monde (Public)
+                                    </label>
+                                </div>
+
+                                <div id="family-share-list" class="{% if selected_repo.visibility == 'public' %}hidden{% endif %} pt-2 border-t border-gray-100 space-y-1 max-h-[120px] overflow-y-auto">
+                                    <span class="text-[10px] text-gray-400 font-bold block uppercase mb-1">Autoriser :</span>
+                                    {% for membre in membres_famille %}
+                                    <label class="flex items-center gap-2 text-xs text-gray-600 cursor-pointer hover:text-gray-900">
+                                        <input type="checkbox" name="share_users" value="{{ membre.id }}" {% if membre.id in current_access_ids %}checked{% endif %} class="rounded text-indigo-600 focus:ring-indigo-500">
+                                        👤 {{ membre.username }}
+                                    </label>
+                                    {% endfor %}
+                                </div>
+
+                                <button type="submit" class="w-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[11px] font-bold py-1.5 rounded-lg transition border border-indigo-200">
+                                    Mettre à jour les accès
+                                </button>
+                                
+                            </form>
+                        </div>
+                        {% endif %}
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col gap-3">
+                            <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-1.5 flex items-center justify-between">
+                                <span>🌿 Branches ({{ branches|length }})</span>
+                            </h3>
+
+                            <ul class="space-y-1 text-xs max-h-[110px] overflow-y-auto">
+                                {% for b in branches %}
+                                <li class="flex items-center justify-between p-1.5 bg-gray-50 border border-gray-100 rounded-lg">
+                                    <span class="font-mono font-semibold text-gray-700">🌱 {{ b.name }}</span>
+                                    <span class="text-[9px] text-gray-400">{{ b.created_at.strftime('%d/%m %H:%M') }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+
+                            {% if selected_repo.user_id == session['user_id'] %}
+                            <form method="POST" action="{{ url_for('create_branch', repo_id=selected_repo.id) }}" class="flex flex-col gap-1.5 pt-2 border-t border-gray-100">
+                                <input type="text" name="branch_name" required placeholder="nouvelle-branche" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] font-mono outline-none focus:ring-2 focus:ring-indigo-500">
+                                <div class="flex gap-1.5">
+                                    <select name="source_branch_id" class="flex-grow min-w-0 border border-gray-300 rounded-lg px-1 py-1.5 text-[10px] outline-none" title="Copier le code depuis...">
+                                        {% for b in branches %}
+                                        <option value="{{ b.id }}">{{ b.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="submit" class="shrink-0 bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-bold px-3 py-1.5 rounded-lg transition">Créer</button>
+                                </div>
+                            </form>
+                            {% endif %}
+
+                            <div class="pt-2 border-t border-gray-100 flex flex-col gap-1.5">
+                                <span class="text-xs font-bold text-gray-800 uppercase tracking-wider">🔀 Fusions ({{ merge_requests|length }})</span>
+                                {% if branches|length >= 2 %}
+                                <a href="{{ url_for('create_merge_request', repo_id=selected_repo.id) }}" class="self-start text-[10px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg border border-indigo-200 transition whitespace-nowrap">+ Nouvelle demande</a>
+                                {% endif %}
+                            </div>
+
+                            {% if not merge_requests %}
+                                <p class="text-[11px] text-gray-400 italic">Aucune demande de fusion pour le moment.</p>
+                            {% else %}
+                                <ul class="space-y-1.5 text-xs max-h-[140px] overflow-y-auto">
+                                    {% for mr in merge_requests %}
+                                    <li>
+                                        <a href="{{ url_for('view_merge_request', mr_id=mr.id) }}" class="block p-2 bg-gray-50 hover:bg-indigo-50 border border-gray-100 hover:border-indigo-200 rounded-lg transition">
+                                            <div class="flex items-center justify-between">
+                                                <span class="font-semibold text-gray-800 truncate">{{ mr.title }}</span>
+                                                <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full
+                                                    {% if mr.status == 'open' %}bg-amber-100 text-amber-700
+                                                    {% elif mr.status == 'merged' %}bg-emerald-100 text-emerald-700
+                                                    {% else %}bg-gray-200 text-gray-600{% endif %}">
+                                                    {{ mr.status }}
+                                                </span>
+                                            </div>
+                                            <span class="text-[10px] text-gray-400 font-mono">{{ mr.source_branch.name }} → {{ mr.target_branch.name }}</span>
+                                        </a>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </div>
+
+                        <div class="bg-white rounded-xl border border-gray-200 p-4 shadow-sm flex flex-col gap-4">
+                            <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-2 flex items-center gap-2">
+                                💬 Discussion & Code Review ({{ selected_repo.comments|length }})
+                            </h3>
+
+                            <div class="space-y-3 max-h-[200px] overflow-y-auto pr-1">
+                                {% if not selected_repo.comments %}
+                                    <p class="text-xs text-gray-400 italic py-2">Aucun message pour le moment. Lancez la discussion !</p>
+                                {% else %}
+                                    {% for comment in selected_repo.comments %}
+                                    <div class="p-2.5 rounded-lg text-xs {% if comment.user_id == session['user_id'] %}bg-indigo-50 border border-indigo-100 self-end{% else %}bg-gray-50 border border-gray-100{% endif %}">
+                                        <div class="flex items-center justify-between font-bold text-gray-800 mb-1">
+                                            <span>👤 {{ comment.author.username }}</span>
+                                            <span class="text-[9px] text-gray-400 font-normal">{{ comment.timestamp.strftime('%d/%m à %H:%M') }}</span>
+                                        </div>
+                                        <p class="text-gray-650 leading-relaxed whitespace-pre-wrap">{{ comment.content }}</p>
+                                    </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+
+                            <form method="POST" action="{{ url_for('forge') }}" class="flex gap-2 pt-2 border-t border-gray-100">
+                                <input type="hidden" name="add_comment" value="1">
+                                <input type="hidden" name="repo_id" value="{{ selected_repo.id }}">
+                                
+                                <input type="text" name="content" required placeholder="💬 Posez une question ou faites une remarque sur le code..." class="flex-grow border border-gray-300 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+                                <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition shadow-sm">
+                                    Envoyer
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="bg-white p-4 rounded-xl border border-gray-200 flex-grow flex flex-col overflow-hidden shadow-sm">
+                            <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-1.5 mb-2">🕒 Historique</h3>
+                            {% if not selected_repo.commits %}
+                                <p class="text-[11px] text-gray-400 italic">Aucun commit.</p>
+                            {% else %}
+                                <div class="space-y-2 overflow-y-auto flex-grow pr-1 text-[11px]">
+                                    {% for c in selected_repo.commits|reverse %}
+                                    <div class="p-2 bg-gray-50 border border-gray-100 rounded-lg hover:border-indigo-300 cursor-pointer transition" onclick="chargerAncienCommit({{ c.code_snapshot|tojson }})">
+                                        <div class="font-bold text-gray-700 truncate">{{ c.message }}</div>
+                                        <div class="text-[9px] text-gray-400 mt-0.5">{{ c.timestamp.strftime('%d/%m %H:%M') }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+    // Permet de masquer ou afficher la liste des membres si on passe en public/privé
+    function toggleShareList(show) {
+        const list = document.getElementById("family-share-list");
+        if(show) {
+            list.classList.remove("hidden");
+        } else {
+            list.classList.add("hidden");
+        }
+    }
+
+    function chargerAncienCommit(code) {
+        const isOwner = {{ ('true' if selected_repo and selected_repo.user_id == session['user_id'] else 'false')|safe }};
+        if(!isOwner) {
+            // Un membre de la famille peut quand même naviguer dans l'historique du projet partagé pour voir l'évolution !
+            document.getElementById("code-editor").value = code;
+            return;
+        }
+        if(confirm("Charger cette version dans l'éditeur ? (Vos modifications non sauvegardées seront écrasées)")) {
+            document.getElementById("code-editor").value = code;
+        }
+    }
+</script>
+
+{% endblock %}

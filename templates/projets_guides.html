@@ -1,0 +1,329 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{% if not mode %}
+<div class="max-w-4xl mx-auto pt-8">
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-gray-900">🚀 Les Campagnes de Projets Guidés</h1>
+        <p class="text-gray-600 mt-2">Choisissez votre rôle pour continuer l'aventure de code.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-amber-100 text-amber-600 flex items-center justify-center rounded-xl mb-6 text-3xl">📝</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Enseignant</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">
+                    Créez de nouvelles missions de code pas à pas. Définissez les objectifs 🧠, les indices sur papier 📝, et les critères de validation automatique 💻.
+                </p>
+            </div>
+            <a href="{{ url_for('projets_guides', mode='prof') }}" class="block text-center bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">
+                Créer un nouveau projet
+            </a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-indigo-100 text-indigo-600 flex items-center justify-center rounded-xl mb-6 text-3xl">💻</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Apprenti</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">
+                    Rejoignez les campagnes actives créées pour vous. Résolvez les énigmes de programmation et faites grimper les barres de progression.
+                </p>
+            </div>
+            <a href="{{ url_for('projets_guides', mode='eleve') }}" class="block text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">
+                Lancer mes missions de code
+            </a>
+        </div>
+    </div>
+</div>
+
+{% elif mode == 'prof' %}
+<div class="max-w-5xl mx-auto pt-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+    
+    <div class="lg:col-span-2 space-y-6">
+        <div class="flex items-center justify-between mb-2">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">📝 Créateur d'Aventure Code</h1>
+                <p class="text-sm text-gray-500 mt-0.5">Structurez un projet par étapes guidées pour votre famille.</p>
+            </div>
+            <a href="{{ url_for('projets_guides') }}" class="text-sm font-semibold text-indigo-600 hover:underline">← Retour</a>
+        </div>
+
+        <form method="POST" action="{{ url_for('projets_guides') }}" onsubmit="preparerFormulaireProf(event)" class="space-y-6">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700 mb-1">Titre du Projet Général</label>
+                    <input type="text" id="proj-title" name="title" required placeholder="Ex: 👾 Alerte Invasion Alien" class="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 text-sm">
+                </div>
+            </div>
+
+            <div class="space-y-3" id="liste-etapes-prof">
+                </div>
+
+            <div class="bg-amber-50/50 p-5 rounded-xl border border-dashed border-amber-300 space-y-4">
+                <h3 class="text-sm font-bold text-amber-900 uppercase tracking-wider">➕ Ajouter une Étape</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">🧠 Consigne / Objectif</label>
+                        <textarea id="etape-consigne" rows="2" placeholder="Ex: Utilise print() pour dire Bonjour." class="w-full p-2 text-xs bg-white border border-gray-300 rounded-lg outline-none"></textarea>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">📝 Indice / Papier</label>
+                        <textarea id="etape-hint" rows="2" placeholder="Ex: Astuce, écris print('texte')." class="w-full p-2 text-xs bg-white border border-gray-300 rounded-lg outline-none"></textarea>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">💻 Validation : Le code doit contenir :</label>
+                        <input type="text" id="etape-val-code" placeholder="Ex: print" class="w-full p-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-600 mb-1">🖥️ Validation : La console doit afficher :</label>
+                        <input type="text" id="etape-val-out" placeholder="Ex: bonjour" class="w-full p-2 text-xs bg-white border border-gray-300 rounded-lg outline-none">
+                    </div>
+                </div>
+                <button type="button" onclick="ajouterEtapeTableau()" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 rounded-lg text-xs transition">
+                    Valider et ajouter cette étape au projet
+                </button>
+            </div>
+
+            <input type="hidden" name="steps_data" id="steps_data_input">
+            <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-xl text-sm shadow transition">
+                💾 Enregistrer définitivement la Campagne en BDD
+            </button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-1 border-t lg:border-t-0 lg:border-l border-gray-200 pt-6 lg:pt-0 lg:pl-6">
+        <h2 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4">📚 Liste des projets en ligne</h2>
+        
+        {% if not projets %}
+            <p class="text-xs text-gray-400 italic">Aucun projet enregistré en BDD pour le moment.</p>
+        {% else %}
+            <div class="space-y-3 max-h-[calc(100vh-250px)] overflow-y-auto pr-1">
+                {% for p in projets %}
+                <div class="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4 group hover:border-gray-300 transition">
+                    <div class="truncate">
+                        <h4 class="text-xs font-bold text-gray-800 truncate" title="{{ p.title }}">{{ p.title }}</h4>
+                        <span class="text-[10px] text-gray-400 font-medium">Créé en BDD</span>
+                    </div>
+                    
+                    <form method="POST" action="{{ url_for('supprimer_projet_guide', id=p.id) }}" onsubmit="return confirm('Es-tu sûr de vouloir supprimer définitivement ce projet ?');">
+                        <button type="submit" class="text-gray-400 hover:text-red-500 p-1.5 rounded-lg hover:bg-red-50 transition" title="Supprimer le projet">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+</div>
+
+{% elif mode == 'eleve' %}
+    {% if not projet_charge %}
+    <div class="max-w-4xl mx-auto pt-4">
+        <div class="flex items-center justify-between mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">🎮 Choisissez votre Mission</h1>
+                <p class="text-sm text-gray-500 mt-0.5">Sélectionnez un projet guidé pour lancer l'interpréteur.</p>
+            </div>
+            <a href="{{ url_for('projets_guides') }}" class="text-sm font-semibold text-indigo-600 hover:underline">← Retour</a>
+        </div>
+
+        {% if not projets %}
+            <div class="bg-white p-8 rounded-xl border border-gray-200 text-center">
+                <p class="text-gray-500 italic text-sm">Aucun projet n'a encore été créé par le professeur. Revenez plus tard !</p>
+            </div>
+        {% else %}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {% for p in projets %}
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
+                    <div>
+                        <h3 class="text-lg font-bold text-gray-800 mb-2">{{ p.title }}</h3>
+                        <span class="inline-block bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] px-2 py-0.5 rounded-full font-bold mb-4">
+                            Disponible
+                        </span>
+                    </div>
+                    <a href="{{ url_for('projets_guides', mode='eleve', id=p.id) }}" class="block text-center bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2.5 rounded-lg transition">
+                        Démarrer le projet ➔
+                    </a>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    {% else %}
+    <div class="max-w-6xl mx-auto pt-2">
+        <div class="flex items-center justify-between border-b border-gray-200 pb-3 mb-4">
+            <div>
+                <a href="{{ url_for('projets_guides', mode='eleve') }}" class="text-xs text-indigo-600 font-semibold hover:underline">← Choisir une autre mission</a>
+                <h1 class="text-xl font-bold text-gray-900 mt-1" id="project-title">{{ projet_charge.title }}</h1>
+            </div>
+            <div class="bg-gray-100 text-gray-700 px-4 py-1 rounded-full text-xs font-bold" id="progress-badge">
+                Étape 1 / 1
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-220px)] min-h-[480px]">
+            <div class="lg:col-span-1 flex flex-col gap-4 h-full">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
+                    <div class="flex items-center gap-2 mb-2"><span class="text-xl">🧠</span><h2 class="text-sm font-bold text-gray-800 uppercase tracking-wider">L'Objectif</h2></div>
+                    <p id="step-consigne" class="text-sm text-gray-600 leading-relaxed"></p>
+                </div>
+
+                <div class="bg-amber-50 p-5 rounded-xl shadow-sm border border-amber-200">
+                    <div class="flex items-center gap-2 mb-2"><span class="text-xl">📝</span><h2 class="text-sm font-bold text-amber-900 uppercase tracking-wider">Sur ton papier</h2></div>
+                    <p id="step-hint" class="text-xs text-amber-800 leading-relaxed italic"></p>
+                </div>
+
+                <div id="validation-box" class="mt-auto p-4 bg-gray-50 border border-gray-200 rounded-xl text-center">
+                    <div id="validation-status" class="text-sm font-bold text-gray-700">En attente de ton code... ⏳</div>
+                    <button onclick="passerEtapeSuivante()" id="btn-next" class="hidden w-full mt-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs transition">Étape Suivante ➔</button>
+                </div>
+            </div>
+
+            <div class="lg:col-span-2 flex flex-col gap-4 h-full">
+                <div class="bg-slate-900 rounded-xl shadow-md p-4 flex flex-col flex-grow relative">
+                    <div class="flex items-center justify-between pb-2 border-b border-slate-800 mb-2">
+                        <span class="text-xs font-bold text-slate-400 font-mono">💻 script.py</span>
+                        <button onclick="verifierCode()" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1.5 px-4 rounded-lg transition">⚙️ Lancer et Vérifier</button>
+                    </div>
+                    <textarea id="code-editor" class="w-full flex-grow bg-slate-950 text-emerald-400 font-mono text-sm p-3 rounded-lg outline-none resize-none border border-slate-800 focus:border-indigo-500" spellcheck="false"># Écris ton code Python ici&#10;</textarea>
+                </div>
+
+                <div class="bg-black text-slate-200 rounded-xl p-4 h-36 font-mono text-xs overflow-y-auto border border-slate-900">
+                    <div id="console-output" class="white-space-pre text-slate-300">[La console est vide]</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endif %}
+
+<script>
+    // Partagé / Générique
+    const modeActuel = "{{ mode }}";
+    let tableauEtapesProf = [];
+
+    // --- LOGIQUE PROF ---
+    function ajouterEtapeTableau() {
+        const consigne = document.getElementById("etape-consigne").value.trim();
+        const hint = document.getElementById("etape-hint").value.trim();
+        const valCode = document.getElementById("etape-val-code").value.trim();
+        const valOut = document.getElementById("etape-val-out").value.trim();
+
+        if(!consigne) return alert("Donnez au moins un objectif !");
+
+        tableauEtapesProf.push({ consigne, hint, valCode, valOut });
+        
+        // Reset des inputs d'étapes
+        document.getElementById("etape-consigne").value = "";
+        document.getElementById("etape-hint").value = "";
+        document.getElementById("etape-val-code").value = "";
+        document.getElementById("etape-val-out").value = "";
+
+        redessinerEtapesProf();
+    }
+
+    function redessinerEtapesProf() {
+        const container = document.getElementById("liste-etapes-prof");
+        container.innerHTML = "";
+        tableauEtapesProf.forEach((etp, idx) => {
+            container.innerHTML += `
+                <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm flex items-center justify-between">
+                    <div>
+                        <h4 class="text-xs font-bold text-gray-700">Étape ${idx + 1}</h4>
+                        <p class="text-xs text-gray-500 truncate max-w-md">${etp.consigne}</p>
+                    </div>
+                    <button type="button" onclick="tableauEtapesProf.splice(${idx},1); redessinerEtapesProf();" class="text-xs text-red-500 font-semibold hover:underline">Supprimer</button>
+                </div>
+            `;
+        });
+    }
+
+    function preparerFormulaireProf(e) {
+        if(tableauEtapesProf.length === 0) {
+            e.preventDefault();
+            return alert("Ajoutez au moins une étape à votre projet !");
+        }
+        document.getElementById("steps_data_input").value = JSON.stringify(tableauEtapesProf);
+    }
+
+    // --- LOGIQUE ÉLÈVE ---
+    let etapesDuProjetEleve = [];
+    let etapeActuelleIndex = 0;
+
+    {% if projet_charge %}
+        etapesDuProjetEleve = {{ projet_charge.steps_json|safe }};
+    {% endif %}
+
+    function chargerEtapeEleve() {
+        if (etapesDuProjetEleve.length === 0) return;
+        const etape = etapesDuProjetEleve[etapeActuelleIndex];
+        
+        document.getElementById("progress-badge").innerText = `Étape ${etapeActuelleIndex + 1} / ${etapesDuProjetEleve.length}`;
+        document.getElementById("step-consigne").innerText = etape.consigne;
+        document.getElementById("step-hint").innerText = etape.hint ? `Indice : ${etape.hint}` : "Pas d'indice pour cette étape.";
+        
+        document.getElementById("btn-next").classList.add("hidden");
+        document.getElementById("validation-status").innerHTML = "En attente de ton code... ⏳";
+        document.getElementById("validation-box").className = "mt-auto p-4 bg-gray-50 border border-gray-200 rounded-xl text-center";
+    }
+
+    function verifierCode() {
+        const code = document.getElementById("code-editor").value;
+        const consoleOut = document.getElementById("console-output");
+        const etape = etapesDuProjetEleve[etapeActuelleIndex];
+
+        let simulatedOutput = "";
+        if (code.includes("print(")) {
+            const match = code.match(/print\((['"])(.*?)\1\)/);
+            simulatedOutput = match ? match[2] : "Erreur de syntaxe print";
+        } else {
+            simulatedOutput = "[Exécuté avec succès]";
+        }
+        consoleOut.innerText = simulatedOutput;
+
+        // Validation dynamique basée sur les entrées du prof
+        let codeValide = true;
+        let sortieValide = true;
+
+        if (etape.valCode && !code.includes(etape.valCode)) codeValide = false;
+        if (etape.valOut && !simulatedOutput.toLowerCase().includes(etape.valOut.toLowerCase())) sortieValide = false;
+
+        const statusBox = document.getElementById("validation-box");
+        const statusText = document.getElementById("validation-status");
+        const nextBtn = document.getElementById("btn-next");
+
+        if (codeValide && sortieValide) {
+            statusBox.className = "mt-auto p-4 bg-emerald-50 border border-emerald-300 rounded-xl text-center";
+            statusText.innerHTML = "🎉 Étape Validée !";
+            nextBtn.classList.remove("hidden");
+        } else {
+            statusBox.className = "mt-auto p-4 bg-rose-50 border border-rose-200 rounded-xl text-center";
+            statusText.innerHTML = "❌ Condition non remplie. Réessaie !";
+            nextBtn.classList.add("hidden");
+        }
+    }
+
+    function passerEtapeSuivante() {
+        if (etapeActuelleIndex < etapesDuProjetEleve.length - 1) {
+            etapeActuelleIndex++;
+            chargerEtapeEleve();
+        } else {
+            alert("🚀 Mission accomplie ! Tout le projet est validé !");
+            window.location.href = "{{ url_for('projets_guides', mode='eleve') }}";
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if(modeActuel === 'eleve') chargerEtapeEleve();
+    });
+</script>
+
+{% endblock %}

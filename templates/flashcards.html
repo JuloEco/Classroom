@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{% if not mode %}
+<div class="max-w-4xl mx-auto pt-8">
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-gray-900">🃏 Cartes Mémoire & Automatismes</h1>
+        <p class="text-gray-600 mt-2">Entraînez vos réflexes syntaxiques et validez les bases du pseudo-code.</p>
+    </div>
+
+    <div class="grid grid-cols-1 {% if role == 'prof' %}md:grid-cols-2{% endif %} gap-8 max-w-3xl mx-auto">
+        
+        {% if role == 'prof' %}
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-amber-100 text-amber-600 flex items-center justify-center rounded-xl mb-6 text-3xl">✍️</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Enseignant</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">Rédigez de nouveaux défis Recto/Verso. Posez un problem conceptuel et donnez la solution Python exacte.</p>
+            </div>
+            <a href="{{ url_for('flashcards', mode='prof') }}" class="block text-center bg-amber-600 hover:bg-amber-700 text-white font-semibold py-3 rounded-xl transition">Gérer les Flashcards</a>
+        </div>
+        {% endif %}
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-indigo-100 text-indigo-600 flex items-center justify-center rounded-xl mb-6 text-3xl">⚡</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Entraînement</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">Lancez une pile de cartes. Devinez la réponse, retournez la carte en 3D et validez votre score en famille.</p>
+            </div>
+            <a href="{{ url_for('flashcards', mode='eleve') }}" class="block text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition">Démarrer le rituel</a>
+        </div>
+
+    </div>
+</div>
+
+{% elif mode == 'prof' %}
+<div class="max-w-5xl mx-auto pt-4 grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div class="lg:col-span-2 space-y-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">✍️ Générateur de Flashcards</h1>
+                <p class="text-sm text-gray-500 mt-0.5">Alimentez la base de données de questions rapides.</p>
+            </div>
+            <a href="{{ url_for('flashcards') }}" class="text-sm font-semibold text-indigo-600 hover:underline">← Retour</a>
+        </div>
+
+        <form method="POST" action="{{ url_for('flashcards') }}" class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">📁 Catégorie / Thème</label>
+                <input type="text" name="category" placeholder="Ex: Les Variables, Boucles, Conditions..." required class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500">
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">🧠 Recto : La Question / Le Défi</label>
+                <textarea name="question" rows="2" placeholder="Ex: Comment ajouter l'élément 'Cecil' à la fin de la liste 'joueurs' ?" required class="w-full p-3 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"></textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-gray-600 uppercase mb-1">💻 Verso : La Réponse en Code Python</label>
+                <textarea name="answer" rows="3" placeholder="Ex: joueurs.append('Cecil')" required class="w-full p-3 bg-slate-950 text-emerald-400 font-mono text-sm rounded-lg outline-none border border-slate-800 focus:border-amber-500" spellcheck="false"></textarea>
+            </div>
+            <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-2.5 rounded-lg text-xs transition shadow">
+                💾 Enregistrer la carte en BDD
+            </button>
+        </form>
+    </div>
+
+    <div class="lg:col-span-1 border-t lg:border-t-0 lg:border-l border-gray-200 pt-6 lg:pt-0 lg:pl-6">
+        <h2 class="text-sm font-bold text-gray-800 uppercase tracking-wider mb-4">🗂️ Boîte à Questions ({{ cards|length }})</h2>
+        {% if not cards %}
+            <p class="text-xs text-gray-400 italic">Aucune carte dans la boîte.</p>
+        {% else %}
+            <div class="space-y-3 max-h-[calc(100vh-220px)] overflow-y-auto pr-1">
+                {% for c in cards %}
+                <div class="bg-white p-3 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between gap-4">
+                    <div class="truncate">
+                        <span class="text-[9px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold uppercase">{{ c.category }}</span>
+                        <h4 class="text-xs font-bold text-gray-700 truncate mt-1" title="{{ c.question }}">{{ c.question }}</h4>
+                    </div>
+                    <form method="POST" action="{{ url_for('supprimer_flashcard', id=c.id) }}" onsubmit="return confirm('Supprimer cette carte ?');">
+                        <button type="submit" class="text-gray-400 hover:text-red-500 p-1 rounded-lg hover:bg-red-50 transition">
+                            🗑️
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+{% elif mode == 'eleve' %}
+<div class="max-w-2xl mx-auto pt-4 flex flex-col items-center">
+    <div class="w-full flex items-center justify-between mb-8">
+        <div>
+            <h1 class="text-xl font-bold text-gray-900">⚡ Échauffement Flash</h1>
+            <p class="text-xs text-gray-500">Trouvez la réponse de tête ou sur votre feuille avant de retourner.</p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button onclick="melangerCartes()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg font-semibold transition">
+                🔀 Mélanger la pile
+            </button>
+            <a href="{{ url_for('flashcards') }}" class="text-xs font-semibold text-indigo-600 hover:underline">← Quitter</a>
+        </div>
+    </div>
+
+    {% if not cards %}
+        <div class="bg-white p-8 rounded-xl border border-gray-200 text-center w-full">
+            <p class="text-gray-500 italic text-sm">Le paquet est vide ! Demandez au professeur de créer des cartes.</p>
+        </div>
+    {% else %}
+        <div class="w-full h-72 [perspective:1000px] cursor-pointer group" onclick="retournerLaCarte()">
+            <div id="flashcard-inner" class="relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] shadow-sm hover:shadow-md rounded-2xl">
+                
+                <div class="absolute inset-0 w-full h-full [backface-visibility:hidden] bg-white border-2 border-gray-200 rounded-2xl p-8 flex flex-col justify-between">
+                    <div class="flex items-center justify-between border-b border-gray-100 pb-2">
+                        <span id="card-category" class="text-xs font-bold text-indigo-600 uppercase tracking-wider"></span>
+                        <span class="text-xs text-gray-400 font-medium">🧠 Question</span>
+                    </div>
+                    <p id="card-question" class="text-lg font-bold text-center text-gray-800 my-auto px-4 leading-relaxed"></p>
+                    <div class="text-center text-xs text-slate-400 font-semibold italic">💡 Cliquez pour retourner la carte</div>
+                </div>
+
+                <div class="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] bg-slate-900 border-2 border-slate-800 rounded-2xl p-8 flex flex-col justify-between">
+                    <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span class="text-xs font-bold text-emerald-400 font-mono">💻 Code Python attendu</span>
+                        <span class="text-xs text-slate-500 font-medium">🖥️ Solution</span>
+                    </div>
+                    <pre id="card-answer" class="text-base font-mono font-bold text-center text-emerald-300 my-auto overflow-x-auto p-4 bg-slate-950 rounded-xl border border-slate-800"></pre>
+                    <div class="text-center text-xs text-slate-500 font-semibold italic">Cliquez à nouveau pour revenir à la question</div>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="flex items-center justify-between w-full mt-8 gap-4">
+            <button onclick="changerCarte(-1)" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold rounded-xl text-xs transition">
+                ⬅️ Précédente
+            </button>
+            <div class="text-xs font-bold text-gray-500 bg-gray-50 border border-gray-200 px-4 py-2 rounded-full shadow-sm" id="card-counter">
+                Carte 1 / 1
+            </div>
+            <button onclick="changerCarte(1)" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm">
+                Suivante ➡️
+            </button>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    let itemCards = [
+        {% for c in cards %}
+        { 
+            category: {{ c.category|tojson }}, 
+            question: {{ c.question|tojson }}, 
+            answer: {{ c.answer|tojson }} 
+        },
+        {% endfor %}
+    ];
+
+    let currentCardIdx = 0;
+    let isFlipped = false;
+
+    function afficherCarte() {
+        if (itemCards.length === 0) return;
+        
+        const inner = document.getElementById("flashcard-inner");
+        inner.style.transform = "rotateY(0deg)";
+        isFlipped = false;
+
+        setTimeout(() => {
+            const carte = itemCards[currentCardIdx];
+            document.getElementById("card-category").innerText = `📁 ${carte.category}`;
+            document.getElementById("card-question").innerText = carte.question;
+            document.getElementById("card-answer").innerText = carte.answer;
+            document.getElementById("card-counter").innerText = `Carte ${currentCardIdx + 1} / ${itemCards.length}`;
+        }, 150);
+    }
+
+    function retournerLaCarte() {
+        const inner = document.getElementById("flashcard-inner");
+        if (!isFlipped) {
+            inner.style.transform = "rotateY(180deg)";
+            isFlipped = true;
+        } else {
+            inner.style.transform = "rotateY(0deg)";
+            isFlipped = false;
+        }
+    }
+
+    function changerCarte(direction) {
+        if (itemCards.length <= 1) return;
+        currentCardIdx += direction;
+        if (currentCardIdx >= itemCards.length) currentCardIdx = 0;
+        if (currentCardIdx < 0) currentCardIdx = itemCards.length - 1;
+        afficherCarte();
+    }
+
+    function melangerCartes() {
+        if (itemCards.length <= 1) return;
+        for (let i = itemCards.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [itemCards[i], itemCards[j]] = [itemCards[j], itemCards[i]];
+        }
+        currentCardIdx = 0;
+        afficherCarte();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (itemCards.length > 0 && "{{ mode }}" === 'eleve') afficherCarte();
+    });
+</script>
+{% endif %}
+
+{% endblock %}

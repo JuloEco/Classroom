@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% block content %}
+
+{% if not mode %}
+<div class="max-w-4xl mx-auto pt-8">
+    <div class="text-center mb-10">
+        <h1 class="text-3xl font-bold text-gray-900">🧠 Studio de Cartes Mentales</h1>
+        <p class="text-gray-600 mt-2">Choisissez votre espace pour commencer à structurer vos connaissances.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-indigo-100 text-indigo-600 flex items-center justify-center rounded-xl mb-6 text-3xl">🛠️</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Créateur</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">
+                    Construisez, modifiez et reliez des formes colorées directement sur le tableau pour concevoir des arbres de révision sur-mesure.
+                </p>
+            </div>
+            <a href="{{ url_for('mindmaps', mode='createur') }}" class="block text-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">
+                Accéder à l'atelier de création
+            </a>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 flex flex-col justify-between hover:shadow-md transition">
+            <div>
+                <div class="w-14 h-14 bg-emerald-100 text-emerald-600 flex items-center justify-center rounded-xl mb-6 text-3xl">👁️</div>
+                <h3 class="text-2xl font-bold text-gray-800 mb-3">Espace Consultation</h3>
+                <p class="text-gray-600 text-sm mb-6 leading-relaxed">
+                    Explorez vos cartes mentales enregistrées. Cliquez sur les nœuds pour les déplier ou les replier et réviser activement.
+                </p>
+            </div>
+            <a href="{{ url_for('mindmaps', mode='eleve') }}" class="block text-center bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl transition shadow-sm">
+                Ouvrir mes cartes enregistrées
+            </a>
+        </div>
+    </div>
+</div>
+
+{% else %}
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900">
+            {% if mode == 'createur' %}🛠️ Atelier de Création{% else %}👁️ Mode Révision & Consultation{% endif %}
+        </h1>
+        <p class="text-sm text-gray-500 mt-0.5">
+            {% if mode == 'createur' %}Cliquez sur un nœud pour le définir comme parent, puis ajoutez une forme.{% else %}Cliquez sur les nœuds pour déplier le cours.{% endif %}
+        </p>
+    </div>
+    <a href="{{ url_for('mindmaps') }}" class="inline-flex items-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition">
+        ← Changer d'espace
+    </a>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-220px)] min-h-[550px]">
+    <div class="lg:col-span-1 flex flex-col gap-4 h-full overflow-y-auto">
+        
+        {% if mode == 'createur' %}
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 space-y-4">
+            <h2 class="text-sm font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-2">🎨 Formes</h2>
+            
+            <div id="targetDisplay" class="p-2.5 bg-amber-50 border border-dashed border-amber-300 text-amber-800 text-xs font-semibold rounded-lg text-center">
+                🎯 Parent : Racine
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Texte de la forme</label>
+                <input type="text" id="nodeTitle" value="Idée" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Note de cours (Optionnel)</label>
+                <textarea id="nodeDesc" rows="2" placeholder="Devient un bloc vert si le texte ci-dessus est vide." class="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-1">
+                <button onclick="ajouterBranche('rectangle')" class="bg-indigo-600 hover:bg-indigo-700 text-white text-xs py-2 px-1 rounded-lg font-medium transition shadow-sm">🟦 Rectangle</button>
+                <button onclick="ajouterBranche('cercle')" class="bg-rose-500 hover:bg-rose-600 text-white text-xs py-2 px-1 rounded-lg font-medium transition shadow-sm">🔴 Cercle</button>
+                <button onclick="ajouterBranche('nuage')" class="bg-amber-500 hover:bg-amber-600 text-white text-xs py-2 px-1 rounded-lg font-medium transition shadow-sm">☁️ Nuage</button>
+                <button onclick="ajouterBranche('carre')" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs py-2 px-1 rounded-lg font-medium transition shadow-sm">🟩 Carré</button>
+            </div>
+
+            <form method="POST" action="{{ url_for('mindmaps') }}" onsubmit="preparerSauvegarde()" class="border-t border-gray-100 pt-3 mt-2">
+                <input type="hidden" name="content" id="flask-content">
+                <input type="hidden" name="map_id" value="{{ carte_chargee.id if carte_chargee else '' }}">
+                
+                <label class="block text-xs font-medium text-gray-500 mb-1">Nom de la carte mentale</label>
+                <input type="text" name="title" id="flask-title" value="{{ carte_chargee.title if carte_chargee else 'Ma Super Carte' }}" required class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm mb-2 outline-none">
+                
+                <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold py-2 rounded-lg transition shadow">
+                    💾 Sauvegarder en Base
+                </button>
+            </form>
+            
+            <button onclick="reinitialiserCarte()" class="w-full text-center text-[11px] text-red-500 hover:underline font-medium">
+                🔄 Recommencer à zéro
+            </button>
+        </div>
+        {% endif %}
+
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex-grow flex flex-col min-h-[200px]">
+    <h2 class="text-sm font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-2 mb-3">
+        📚 Vos Cartes
+    </h2>
+    {% if not mes_cartes %}
+        <p class="text-xs text-gray-400 italic">Aucune carte enregistrée pour le moment.</p>
+    {% else %}
+        <ul class="space-y-1.5 overflow-y-auto flex-grow text-xs">
+            {% for carte in mes_cartes %}
+                <li class="flex items-center justify-between p-2 rounded-lg border transition {% if carte_chargee and carte_chargee.id == carte.id %}bg-indigo-50 border-indigo-200 text-indigo-900{% else %}bg-gray-50 border-gray-100 hover:bg-gray-100 text-gray-700{% endif %}">
+                    <a href="{{ url_for('mindmaps', mode=mode, id=carte.id) }}" class="font-semibold truncate flex-grow block">
+                        🗺️ {{ carte.title }}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+    </div>
+
+    <div class="lg:col-span-3 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col relative overflow-hidden h-full">
+        <div class="absolute inset-0 overflow-auto" id="scroll-canvas">
+            <svg id="svg-canvas" class="absolute top-0 left-0 w-[3000px] h-[2000px] pointer-events-none z-10"></svg>
+            <div id="nodesLayer" class="absolute top-0 left-0 w-[3000px] h-[2000px] z-20"></div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Intégration esthétique des lignes et des boites */
+    #scroll-canvas {
+        background-color: #f8fafc;
+        background-image: radial-gradient(#e2e8f0 1.5px, transparent 1.5px);
+        background-size: 24px 24px;
+    }
+    .base-node { position: absolute; width: 210px; box-sizing: border-box; border-radius: 8px; user-select: none; transition: transform 0.15s; }
+    .base-node:hover { transform: scale(1.02); }
+    
+    .node-box { background: #ffffff; border: 2px solid #cbd5e1; padding: 12px 14px; font-weight: 600; font-size: 13px; color: #334155; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .node-box.selected-target { border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+    .root-box { border-color: #6366f1; color: #4f46e5; background: #f5f3ff; }
+    
+    /* Variantes géométriques */
+    .shape-cercle { border-radius: 9999px; text-align: center; padding: 14px; }
+    .shape-nuage { border-radius: 20px 4px 20px 4px; }
+    .shape-carre { border-radius: 0px; }
+
+    /* Bloc info vert */
+    .info-card { background: #ffffff; border: 2px solid #10b981; padding: 12px; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .info-card h4 { margin: 0 0 4px 0; color: #0f766e; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+    .info-card p { margin: 0; font-size: 12px; color: #475569; line-height: 1.4; white-space: pre-line; }
+    .info-card.selected-target { border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+</style>
+
+<script>
+    // Chargement de l'arbre existant en BDD ou initialisation par défaut
+    // Chargement de l'arbre existant en BDD ou initialisation par défaut
+    let mindMapData = {% if carte_chargee %}{{ carte_chargee.content|safe }}{% else %}{
+        id: "root",
+        titre: "🚀 Variables",
+        description: "", 
+        enfants: [],
+        x: 100,  
+        y: 250,
+        isOpened: true,
+        hasCustomTitle: true,
+        forme: "rectangle"
+    }{% endif %};
+
+    let nodeCounter = 100; 
+    let idNoeudSelectionne = "root"; 
+    const modeActuel = "{{ mode }}";
+
+    // ─── NOUVEAUTÉ : FONCTION DE FERMETURE POUR LE MODE ÉLÈVE ───
+    function fermerToutSaufRacine(noeud, estRacine = false) {
+        if (!estRacine) {
+            noeud.isOpened = false; // On replie le nœud pour masquer ses enfants à l'élève
+        } else {
+            noeud.isOpened = true;  // La racine doit toujours rester visible pour démarrer
+        }
+        
+        if (noeud.enfants && noeud.enfants.length > 0) {
+            noeud.enfants.forEach(enfant => fermerToutSaufRacine(enfant, false));
+        }
+    }
+
+    function updateInterface() {
+        recalculerPositions(mindMapData, 100, 250);
+        const layer = document.getElementById("nodesLayer");
+        layer.innerHTML = "";
+        genererHTMLNoeuds(mindMapData, layer);
+        dessinerLiaisons();
+        if(modeActuel === 'createur') mettreAJourBadgeCible();
+    }
+
+    // Le reste de tes fonctions (recalculerPositions, genererHTMLNoeuds, etc.) reste identique...
+
+
+
+    function recalculerPositions(noeud, xActuel, yActuel) {
+        noeud.x = xActuel;
+        noeud.y = yActuel;
+        if (noeud.isOpened && noeud.enfants.length > 0) {
+            const espacementY = 110; 
+            let totalEnfants = noeud.enfants.length;
+            let departY = yActuel - ((totalEnfants - 1) * espacementY) / 2;
+
+            noeud.enfants.forEach((enfant, index) => {
+                recalculerPositions(enfant, xActuel + 290, departY + (index * espacementY));
+            });
+        }
+    }
+
+    function genererHTMLNoeuds(noeud, layer) {
+        const isRoot = noeud.id === "root";
+        const divNode = document.createElement("div");
+        divNode.style.left = `${noeud.x}px`;
+        divNode.style.top = `${noeud.y}px`;
+
+        const isInfoCard = (noeud.enfants.length === 0 && noeud.description && noeud.description.trim() !== "");
+        let formeClass = "shape-" + (noeud.forme || "rectangle");
+
+        if (isInfoCard) {
+            divNode.className = `base-node info-card ${modeActuel === 'createur' && noeud.id === idNoeudSelectionne ? 'selected-target' : ''}`;
+            let titreHTML = noeud.hasCustomTitle ? `<h4>📌 ${noeud.titre}</h4>` : '';
+            divNode.innerHTML = `${titreHTML}<p>${noeud.description}</p>`;
+        } else {
+            divNode.className = `base-node node-box ${formeClass} ${isRoot ? 'root-box' : ''} ${modeActuel === 'createur' && noeud.id === idNoeudSelectionne ? 'selected-target' : ''}`;
+            divNode.innerHTML = `<span>${noeud.titre}</span>`;
+        }
+
+        divNode.onclick = (e) => {
+            e.stopPropagation();
+            if (modeActuel === "createur") {
+                idNoeudSelectionne = noeud.id;
+                updateInterface();
+            } else {
+                if (noeud.enfants.length > 0) {
+                    noeud.isOpened = !noeud.isOpened;
+                    updateInterface();
+                }
+            }
+        };
+
+        layer.appendChild(divNode);
+        if (noeud.isOpened) {
+            noeud.enfants.forEach(enfant => genererHTMLNoeuds(enfant, layer));
+        }
+    }
+
+    function dessinerLiaisons() {
+        const svg = document.getElementById("svg-canvas");
+        svg.innerHTML = "";
+        trancerLiaisonsRecursif(mindMapData, svg);
+    }
+
+    function trancerLiaisonsRecursif(noeud, svg) {
+        if (noeud.isOpened && noeud.enfants.length > 0) {
+            noeud.enfants.forEach(enfant => {
+                const startX = noeud.x + 210; 
+                const startY = noeud.y + 22;
+                const endX = enfant.x;
+                const endY = enfant.y + 22;
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", `M ${startX} ${startY} C ${startX + 50} ${startY}, ${endX - 50} ${endY}, ${endX} ${endY}`);
+                
+                let color = "#cbd5e1"; // Couleur douce par défaut
+                if(modeActuel === 'eleve') color = "#6366f1"; // Accentuation indigo en mode élève
+                if(enfant.forme === "cercle") color = "#f43f5e";
+                if(enfant.forme === "nuage") color = "#f59e0b";
+
+                path.setAttribute("stroke", color);
+                path.setAttribute("stroke-width", "2");
+                path.setAttribute("fill", "none");
+                svg.appendChild(path);
+                trancerLiaisonsRecursif(enfant, svg);
+            });
+        }
+    }
+
+    function mettreAJourBadgeCible() {
+        const targetNode = trouverNoeudParId(mindMapData, idNoeudSelectionne);
+        const badge = document.getElementById("targetDisplay");
+        if (badge && targetNode) {
+            badge.innerText = `🎯 Connecter sur : ${targetNode.hasCustomTitle ? targetNode.titre : "[Bloc d'info]"}`;
+        }
+    }
+
+    function trouverNoeudParId(noeud, id) {
+        if (noeud.id === id) return noeud;
+        if (noeud.enfants) {
+            for (let enfant of noeud.enfants) {
+                let trouve = trouverNoeudParId(enfant, id);
+                if (trouve) return trouve;
+            }
+        }
+        return null;
+    }
+
+    function ajouterBranche(typeForme) {
+        let titre = document.getElementById("nodeTitle").value.trim();
+        const description = document.getElementById("nodeDesc").value.trim();
+
+        if (!titre && !description) return alert("Remplissez au moins un champ !");
+
+        let hasCustomTitle = true;
+        if (!titre) { titre = "Information"; hasCustomTitle = false; }
+
+        const parentNode = trouverNoeudParId(mindMapData, idNoeudSelectionne);
+        if (parentNode) {
+            nodeCounter++;
+            let nouvelId = "node_" + nodeCounter;
+            parentNode.enfants.push({
+                id: nouvelId, titre: titre, description: description,
+                enfants: [], isOpened: true, hasCustomTitle: hasCustomTitle, forme: typeForme
+            });
+            parentNode.isOpened = true; 
+            idNoeudSelectionne = nouvelId;
+            document.getElementById("nodeTitle").value = "Idée";
+            document.getElementById("nodeDesc").value = "";
+            updateInterface();
+        }
+    }
+
+    function reinitialiserCarte() {
+        if (confirm("Réinitialiser l'arbre ?")) {
+            let sujet = prompt("Titre de départ :", "🚀 Variables");
+            if(sujet) {
+                mindMapData = { id: "root", titre: sujet, description: "", enfants: [], x: 100, y: 250, isOpened: true, hasCustomTitle: true, forme: "rectangle" };
+                idNoeudSelectionne = "root";
+                updateInterface();
+            }
+        }
+    }
+
+    // Capture la structure complète au format String JSON pour l'enregistrer dans Flask
+    function preparerSauvegarde() {
+        document.getElementById('flask-content').value = JSON.stringify(mindMapData);
+        document.getElementById('flask-title').value = document.getElementById('flask-title').value.trim();
+    }
+
+   // Modification de l'initialisation au chargement de la page
+    window.addEventListener('DOMContentLoaded', () => { 
+        // Si on est dans l'espace élève, on prépare le jeu de révision en cachant les branches
+        if (modeActuel === 'eleve') {
+            fermerToutSaufRacine(mindMapData, true);
+        }
+        updateInterface(); 
+    });
+</script>
+{% endif %}
+{% endblock %}

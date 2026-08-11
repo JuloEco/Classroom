@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="max-w-5xl mx-auto pt-4">
+
+    <div class="mb-6">
+        <a href="{{ url_for('forge', repo_id=mr.repo_id) }}" class="text-xs text-indigo-600 hover:underline font-semibold">&larr; Retour à {{ mr.repo.name }}</a>
+        <div class="flex items-center justify-between mt-2 flex-wrap gap-2">
+            <h1 class="text-2xl font-bold text-gray-900">🔀 {{ mr.title }}</h1>
+            <span class="text-xs font-bold px-3 py-1 rounded-full
+                {% if mr.status == 'open' %}bg-amber-100 text-amber-700
+                {% elif mr.status == 'merged' %}bg-emerald-100 text-emerald-700
+                {% else %}bg-gray-200 text-gray-600{% endif %}">
+                {% if mr.status == 'open' %}🟡 Ouverte{% elif mr.status == 'merged' %}✅ Fusionnée{% else %}⚪ Fermée{% endif %}
+            </span>
+        </div>
+        <p class="text-xs text-gray-500 mt-1 font-mono">
+            👤 {{ mr.author.username }} veut fusionner
+            <span class="font-bold text-indigo-700">{{ mr.source_branch.name }}</span> →
+            <span class="font-bold text-slate-700">{{ mr.target_branch.name }}</span>
+            <span class="text-gray-400">· {{ mr.created_at.strftime('%d/%m/%Y à %H:%M') }}</span>
+        </p>
+        {% if mr.description %}
+        <p class="text-sm text-gray-600 mt-3 bg-gray-50 border border-gray-100 rounded-lg p-3 whitespace-pre-wrap">{{ mr.description }}</p>
+        {% endif %}
+    </div>
+
+    {% if mr.status == 'open' %}
+    <form method="POST" action="{{ url_for('execute_merge', mr_id=mr.id) }}" class="mb-6" onsubmit="return confirm('Fusionner {{ mr.source_branch.name }} dans {{ mr.target_branch.name }} ? Le code de la branche cible sera remplacé.');">
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-sm">
+            ✅ Fusionner cette demande
+        </button>
+    </form>
+    {% endif %}
+
+    <!-- Résumé IA -->
+    <div class="bg-indigo-950 rounded-xl border border-indigo-900 p-5 mb-6 shadow-sm">
+        <h3 class="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+            🤖 Résumé IA des changements
+        </h3>
+        <div class="text-xs text-indigo-100 leading-relaxed whitespace-pre-wrap font-mono">{{ mr.ai_summary or "Pas de résumé disponible." }}</div>
+    </div>
+
+    <!-- Diff Viewer -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm mb-6 overflow-hidden">
+        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+            <span>📄 Différences du code</span>
+            <span class="text-[10px] font-normal text-gray-400 font-mono normal-case">
+                {{ mr.target_branch.name }} (cible) vs {{ mr.source_branch.name }} (source)
+            </span>
+        </h3>
+        <div class="overflow-x-auto max-h-[500px] overflow-y-auto">
+            <table class="w-full text-xs font-mono border-collapse">
+                <tbody>
+                    {% for line in diff_data %}
+                    <tr class="
+                        {% if line.type == 'add' %}bg-emerald-50
+                        {% elif line.type == 'delete' %}bg-red-50
+                        {% else %}bg-white{% endif %}">
+                        <td class="w-10 text-right pr-2 select-none text-gray-400 border-r border-gray-100 {% if line.type == 'delete' %}bg-red-100/40{% endif %}">{{ line.old_num }}</td>
+                        <td class="w-10 text-right pr-2 select-none text-gray-400 border-r border-gray-100 {% if line.type == 'add' %}bg-emerald-100/40{% endif %}">{{ line.new_num }}</td>
+                        <td class="w-4 text-center select-none font-bold
+                            {% if line.type == 'add' %}text-emerald-600
+                            {% elif line.type == 'delete' %}text-red-600
+                            {% else %}text-gray-300{% endif %}">
+                            {% if line.type == 'add' %}+{% elif line.type == 'delete' %}-{% else %}&nbsp;{% endif %}
+                        </td>
+                        <td class="pl-2 pr-4 whitespace-pre
+                            {% if line.type == 'add' %}text-emerald-800
+                            {% elif line.type == 'delete' %}text-red-800
+                            {% else %}text-gray-700{% endif %}">{{ line.text }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td class="p-4 text-gray-400 italic">Aucune différence entre les deux branches.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Commentaires -->
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider border-b border-gray-100 pb-2 mb-3">
+            💬 Discussion ({{ comments|length }})
+        </h3>
+
+        <div class="space-y-3 max-h-[250px] overflow-y-auto pr-1 mb-3">
+            {% if not comments %}
+                <p class="text-xs text-gray-400 italic py-2">Aucun commentaire pour le moment.</p>
+            {% else %}
+                {% for comment in comments %}
+                <div class="p-2.5 rounded-lg text-xs bg-gray-50 border border-gray-100">
+                    <div class="flex items-center justify-between font-bold text-gray-800 mb-1">
+                        <span>👤 {{ comment.author.username }}</span>
+                        <span class="text-[9px] text-gray-400 font-normal">{{ comment.timestamp.strftime('%d/%m à %H:%M') }}</span>
+                    </div>
+                    <p class="text-gray-650 leading-relaxed whitespace-pre-wrap">{{ comment.content }}</p>
+                </div>
+                {% endfor %}
+            {% endif %}
+        </div>
+
+        <form method="POST" action="{{ url_for('view_merge_request', mr_id=mr.id) }}" class="flex gap-2 pt-2 border-t border-gray-100">
+            <input type="hidden" name="add_mr_comment" value="1">
+            <input type="text" name="content" required placeholder="💬 Ajouter un commentaire sur cette demande..." class="flex-grow border border-gray-300 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-2 focus:ring-indigo-500">
+            <button type="submit" class="bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold px-4 py-1.5 rounded-lg transition shadow-sm">
+                Envoyer
+            </button>
+        </form>
+    </div>
+
+</div>
+
+{% endblock %}
