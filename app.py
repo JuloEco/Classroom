@@ -339,7 +339,11 @@ def forge():
         elif 'push_code' in request.form:
             repo_id = request.form.get('repo_id')
             branch_id = request.form.get('branch_id')
-            message = request.form.get('message', 'Mise à jour 💻')
+            panel = request.form.get('panel', 'editor')
+            message = request.form.get('message', '').strip()
+            is_quick_save = 'quick_save' in request.form
+            if not message:
+                message = 'Sauvegarde rapide 💾' if is_quick_save else 'Mise à jour 💻'
             code = request.form.get('code')
             if repo_id and code:
                 # On met à jour le code de la branche active (c'est elle qui sert de base aux diffs / merge requests)
@@ -354,7 +358,8 @@ def forge():
                 new_commit = Commit(message=commit_message, code_snapshot=code, repo_id=repo_id)
                 db.session.add(new_commit)
                 db.session.commit()
-                return redirect(url_for('forge', repo_id=repo_id, branch_id=branch_id))
+                flash('Code enregistré ✅' if is_quick_save else 'Modifications poussées 🚀', 'success')
+                return redirect(url_for('forge', repo_id=repo_id, branch_id=branch_id, panel=panel))
 
         elif 'update_visibility' in request.form:
             repo_id = request.form.get('repo_id')
@@ -373,7 +378,7 @@ def forge():
                         
                 db.session.commit()
                 flash('Paramètres de partage mis à jour !', 'success')
-                return redirect(url_for('forge', repo_id=repo_id))
+                return redirect(url_for('forge', repo_id=repo_id, panel='settings'))
 
         elif 'add_comment' in request.form:
             repo_id = request.form.get('repo_id')
@@ -383,11 +388,14 @@ def forge():
                 db.session.add(new_comment)
                 db.session.commit()
                 flash('Message posté avec succès ! 💬', 'success')
-                return redirect(url_for('forge', repo_id=repo_id))
+                return redirect(url_for('forge', repo_id=repo_id, panel='discussion'))
 
     # 2. PRÉPARATION DES DONNÉES D'AFFICHAGE (GET)
     repo_id = request.args.get('repo_id')
     selected_repo = Repo.query.get(repo_id) if repo_id else None
+    active_panel = request.args.get('panel', 'editor')
+    if active_panel not in ('editor', 'settings', 'discussion', 'changes'):
+        active_panel = 'editor'
     
     mes_repos = Repo.query.filter_by(user_id=current_user_id).all()
     shared_access = RepoAccess.query.filter_by(user_id=current_user_id).all()
@@ -430,7 +438,8 @@ def forge():
                            current_access_ids=current_access_ids,
                            branches=branches,
                            merge_requests=merge_requests,
-                           selected_branch=selected_branch)
+                           selected_branch=selected_branch,
+                           active_panel=active_panel)
 
 @app.route('/admin/classes', methods=['GET', 'POST'])
 def admin_classes():
