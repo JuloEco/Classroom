@@ -199,11 +199,11 @@ class MergeRequest(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(20), default='open') # 'open', 'merged', 'closed'
     ai_summary = db.Column(db.Text, nullable=True)     # Résumé IA du diff
-
-    # Instantanés du code au moment de la fusion, pour que le diff affiché
-    # reste correct même après que target_branch.latest_code ait été écrasé.
-    snapshot_target_code = db.Column(db.Text, nullable=True)
-    snapshot_source_code = db.Column(db.Text, nullable=True)
+    # Instantané du code des deux branches au moment de la création de la MR.
+    # Sert à figer le diff affiché : sans ça, une fois la fusion faite, la branche
+    # source et la branche cible ont le même code et le diff "live" retombe à 0/0.
+    source_snapshot = db.Column(db.Text, nullable=True)
+    target_snapshot = db.Column(db.Text, nullable=True)
 
     repo_id = db.Column(db.Integer, db.ForeignKey('repo.id'), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
@@ -503,6 +503,35 @@ def allowed_file(filename):
 def init_db():
     with app.app_context():
         db.create_all()
+
+        # --- Auto-migration légère et générique ---
+        # db.create_all() ne modifie pas les tables déjà existantes : si la base
+        # existe déjà (redeploy sur une base Postgres/SQLite existante), il faut
+        # ajouter à la main les colonnes ajoutées après coup dans les modèles.
+        # Plutôt que de coder en dur des noms de colonnes (fragile si un modèle
+        # change), on compare automatiquement chaque modèle à la table réelle
+        # et on ajoute toute colonne manquante, quel que soit son nom.
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        existing_tables = set(inspector.get_table_names())
+
+        for table in db.metadata.sorted_tables:
+            if table.name not in existing_tables:
+                continue  # table toute neuve, déjà créée intégralement par create_all()
+            existing_columns = {col['name'] for col in inspector.get_columns(table.name)}
+            with db.engine.connect() as conn:
+                for column in table.columns:
+                    if column.name in existing_columns:
+                        continue
+                    col_type = column.type.compile(dialect=db.engine.dialect)
+                    try:
+                        conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}'))
+                        conn.commit()
+                        print(f"[migration] colonne ajoutée : {table.name}.{column.name} ({col_type})")
+                    except Exception as e:
+                        conn.rollback()
+                        print(f"[migration] échec ajout {table.name}.{column.name} : {e}")
+
         repos = Repo.query.all()
         for repo in repos:
             has_branch = Branch.query.filter_by(repo_id=repo.id).first()
@@ -993,7 +1022,9 @@ def create_merge_request(repo_id):
             author_id=session['user_id'],
             source_branch_id=source_id,
             target_branch_id=target_id,
-            ai_summary=ai_summary
+            ai_summary=ai_summary,
+            source_snapshot=src.latest_code,
+            target_snapshot=tgt.latest_code
         )
         db.session.add(mr)
         db.session.commit()
@@ -1021,14 +1052,12 @@ def view_merge_request(mr_id):
             flash('Commentaire ajouté ! 💬', 'success')
             return redirect(url_for('view_merge_request', mr_id=mr.id))
 
-    # Calcul du Diff
-    # Une fois fusionnée, target_branch.latest_code == source_branch.latest_code
-    # (voir execute_merge), donc on rejoue le diff à partir de l'instantané
-    # figé au moment de la fusion plutôt que sur l'état actuel des branches.
-    if mr.status == 'merged' and mr.snapshot_target_code is not None:
-        diff_data = generate_diff(mr.snapshot_target_code, mr.snapshot_source_code)
-    else:
-        diff_data = generate_diff(mr.target_branch.latest_code, mr.source_branch.latest_code)
+    # Calcul du Diff : basé sur l'instantané pris à la création de la MR,
+    # pas sur l'état actuel des branches (qui redeviennent identiques après fusion).
+    # Repli sur le code live des branches pour les MR créées avant l'ajout du snapshot.
+    target_code = mr.target_snapshot if mr.target_snapshot is not None else mr.target_branch.latest_code
+    source_code = mr.source_snapshot if mr.source_snapshot is not None else mr.source_branch.latest_code
+    diff_data = generate_diff(target_code, source_code)
     
     comments = MergeComment.query.filter_by(mr_id=mr.id).order_by(MergeComment.timestamp.asc()).all()
     
@@ -1046,11 +1075,6 @@ def execute_merge(mr_id):
         flash('Cette demande est déjà fermée ou fusionnée.', 'warning')
         return redirect(url_for('view_merge_request', mr_id=mr.id))
         
-    # On fige l'état des deux branches AVANT la copie, pour garder un diff
-    # exploitable après coup (sinon target == source et le diff devient vide).
-    mr.snapshot_target_code = mr.target_branch.latest_code
-    mr.snapshot_source_code = mr.source_branch.latest_code
-
     # Copie du code de la branche source vers la branche cible
     mr.target_branch.latest_code = mr.source_branch.latest_code
     mr.status = 'merged'
