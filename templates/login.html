@@ -1,157 +1,55 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Connexion — Classroom</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --bg:#060b12;
-    --surface:#0d1620;
-    --surface-2:#101b28;
-    --border:#1c2c3d;
-    --accent:#4fc3de;
-    --primary:#0f7ba3;
-    --text:#eaf3f7;
-    --text-muted:#7d95a8;
-    --danger:#e5636b;
-    --success:#4fd68f;
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0;
-    min-height:100vh;
-    background:
-      radial-gradient(circle at 50% -10%, rgba(15,123,163,0.28), transparent 55%),
-      var(--bg);
-    color:var(--text);
-    font-family:'Inter', sans-serif;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:24px;
-  }
-  .card{
-    width:100%;
-    max-width:400px;
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:16px;
-    padding:40px;
-  }
-  h1{
-    font-family:'Space Grotesk', sans-serif;
-    font-weight:600;
-    font-size:1.8rem;
-    text-align:center;
-    margin:0 0 22px;
-  }
-  .octix-badge{
-    display:flex;
-    align-items:flex-start;
-    gap:10px;
-    text-align:left;
-    background:rgba(79,195,222,0.08);
-    border:1px solid rgba(79,195,222,0.28);
-    border-radius:10px;
-    padding:12px 16px;
-    margin-bottom:24px;
-    font-size:0.82rem;
-    line-height:1.5;
-    opacity:0.9;
-  }
-  .octix-badge span:first-child{flex-shrink:0;}
-  .flash{
-    border-radius:9px;
-    padding:11px 14px;
-    font-size:0.85rem;
-    margin-bottom:18px;
-  }
-  .flash.danger{
-    background:rgba(229,99,107,0.1);
-    border:1px solid rgba(229,99,107,0.35);
-    color:#f3a1a6;
-  }
-  .flash.success{
-    background:rgba(79,214,143,0.1);
-    border:1px solid rgba(79,214,143,0.35);
-    color:#9fe8c1;
-  }
-  .field{display:flex; flex-direction:column; gap:6px; margin-bottom:16px;}
-  .field label{font-size:12px; color:var(--text-muted);}
-  .field input{
-    background:var(--surface-2);
-    border:1px solid var(--border);
-    border-radius:9px;
-    padding:12px 14px;
-    color:var(--text);
-    font-size:0.95rem;
-    font-family:'Inter', sans-serif;
-    outline:none;
-    transition:border-color .15s ease;
-  }
-  .field input:focus{border-color:var(--accent);}
-  button{
-    width:100%;
-    padding:13px;
-    border:none;
-    border-radius:9px;
-    background:linear-gradient(135deg, var(--primary), var(--accent));
-    color:#04141c;
-    font-weight:600;
-    font-size:0.95rem;
-    font-family:'Inter', sans-serif;
-    cursor:pointer;
-    margin-top:6px;
-    transition:opacity .15s ease;
-  }
-  button:hover{opacity:0.9;}
-  .register-link{
-    text-align:center;
-    margin-top:20px;
-    font-size:0.85rem;
-    color:var(--text-muted);
-  }
-  .register-link a{color:var(--accent); text-decoration:none;}
-  .register-link a:hover{text-decoration:underline;}
-</style>
-</head>
-<body>
-  <div class="card">
-    <h1>Espace Classroom</h1>
+{% extends 'base.html' %}
+{% block content %}
+<div class="flex items-center justify-center pt-12">
+    <div class="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-100">
+        <h2 class="text-2xl font-bold text-center text-gray-900 mb-6">Connexion à votre espace</h2>
 
-    <div class="octix-badge">
-      <span>🔒</span>
-      <span>Connexion via <b>Octix</b> — même pseudo, même mot de passe sur toutes tes apps Axiom.</span>
+        <div class="flex items-start gap-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-lg px-4 py-3 mb-5 text-xs">
+            <span class="flex-shrink-0">🔒</span>
+            <span>Connexion via <span class="font-semibold">Octix</span> — même pseudo, même mot de passe sur toutes tes apps Axiom.</span>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-5 rounded-md px-4 py-2 text-sm
+                        {% if category == 'success' %}bg-green-50 border border-green-200 text-green-700
+                        {% else %}bg-red-50 border border-red-200 text-red-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('login') }}" class="space-y-5">
+            <div>
+                <label for="username" class="block text-sm font-medium text-gray-700 mb-1">Nom d'utilisateur</label>
+                <input type="text" name="username" id="username" required 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                       placeholder="Ex: prof1 ou eleve1">
+            </div>
+            
+            <div>
+                <label for="password" class="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+                <input type="password" name="password" id="password" required 
+                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                       placeholder="••••••••">
+            </div>
+            
+            <button type="submit" 
+                    class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 rounded-md shadow transition duration-150">
+                Se connecter
+            </button>
+        </form>
+        <p class="mt-4 text-center text-sm text-gray-600">
+    Nouveau sur la plateforme ? 
+    <a href="{{ octix_portal_url }}" target="_blank" rel="noopener" class="text-indigo-600 hover:underline font-medium">Créer ton identifiant Octix ↗</a>
+</p>
+        <div class="mt-6 p-3 bg-gray-50 rounded-lg text-xs text-gray-500 text-center">
+            <p class="font-semibold mb-1">Identifiants de test fournis :</p>
+            <p>Enseignant : <span class="font-mono bg-gray-200 px-1 rounded">prof1</span> / <span class="font-mono bg-gray-200 px-1 rounded">password123</span></p>
+            <p class="mt-1">Élève : <span class="font-mono bg-gray-200 px-1 rounded">eleve1</span> / <span class="font-mono bg-gray-200 px-1 rounded">password123</span></p>
+        </div>
     </div>
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="flash {{ category }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-
-    <form method="post" action="{{ url_for('login') }}">
-      <div class="field">
-        <label for="username">Pseudo</label>
-        <input type="text" id="username" name="username" required autofocus>
-      </div>
-      <div class="field">
-        <label for="password">Mot de passe</label>
-        <input type="password" id="password" name="password" required>
-      </div>
-      <button type="submit">Se connecter</button>
-    </form>
-
-    <p class="register-link">
-      Pas encore de compte ?
-      <a href="{{ octix_portal_url }}" target="_blank" rel="noopener">Crée ton identifiant Octix ↗</a>
-    </p>
-  </div>
-</body>
-</html>
+</div>
+{% endblock %}
