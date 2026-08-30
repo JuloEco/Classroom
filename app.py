@@ -1,4 +1,5 @@
 import os
+import requests
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
@@ -7,65 +8,41 @@ app = Flask(__name__)
 app.secret_key = 'une_cle_secrete_tres_securisee'
 
 # Configuration de la base de données et des uploads
-# En prod (Render), DATABASE_URL est fourni par le service Postgres.
-# En local, si la variable n'existe pas, on retombe sur SQLite.
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
-# Render (et Heroku) fournissent parfois une URL qui commence par "postgres://",
-# mais SQLAlchemy récent exige le préfixe "postgresql://".
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'zip', 'py'}
 
+# ----------------------------------------------------
+# OCTIX — service d'authentification centralisé
+# ----------------------------------------------------
+# Adresse du service Octix (à changer en prod, ex: variable d'environnement)
+OCTIX_URL = os.environ.get("OCTIX_URL", "http://localhost:5050")
+OCTIX_PORTAL_URL = os.environ.get("OCTIX_PORTAL_URL", "http://localhost:5051")
+
+
+def octix_register(username, password):
+    """Crée le compte côté Octix. Retourne (ok, message)."""
+    try:
+        r = requests.post(f"{OCTIX_URL}/register", json={"username": username, "password": password}, timeout=5)
+        if r.status_code == 201:
+            return True, None
+        return False, r.json().get("error", "Erreur inconnue lors de la création du compte.")
+    except requests.exceptions.RequestException:
+        return False, "Le service Octix est injoignable. Réessaie plus tard."
+
+
+def octix_login(username, password):
+    """Vérifie les identifiants auprès d'Octix. Retourne (ok, token_ou_message)."""
+    try:
+        r = requests.post(f"{OCTIX_URL}/login", json={"username": username, "password": password}, timeout=5)
+        if r.status_code == 200:
+            return True, r.json()["token"]
+        return False, "Identifiants incorrects."
+    except requests.exceptions.RequestException:
+        return False, "Le service Octix est injoignable. Réessaie plus tard."
+
 db = SQLAlchemy(app)
-
-# ----------------------------------------------------
-# FILTRE JINJA : rendu léger du Markdown généré par generate_ai_summary()
-# (sinon les ** et ` s'affichent tels quels dans la page, non interprétés)
-# ----------------------------------------------------
-import re
-from markupsafe import Markup, escape
-
-def _inline_markdown(escaped_line: str) -> str:
-    escaped_line = re.sub(r'\*\*(.+?)\*\*', r'<strong class="text-white font-semibold">\1</strong>', escaped_line)
-    escaped_line = re.sub(
-        r'`(.+?)`',
-        r'<code class="px-1 py-0.5 rounded bg-indigo-900/70 text-indigo-200 text-[11px]">\1</code>',
-        escaped_line
-    )
-    return escaped_line
-
-def markdown_lite(text):
-    """Convertit le Markdown léger produit par generate_ai_summary() (gras, code, puces)
-    en HTML, pour éviter d'afficher les ** et ` tels quels dans la page."""
-    if not text:
-        return ""
-    html_parts = []
-    in_list = False
-    for raw_line in text.split('\n'):
-        stripped = raw_line.strip()
-        if stripped.startswith('- '):
-            if not in_list:
-                html_parts.append('<ul class="list-disc ml-5 space-y-0.5">')
-                in_list = True
-            content = _inline_markdown(str(escape(stripped[2:])))
-            html_parts.append(f'<li>{content}</li>')
-            continue
-        if in_list:
-            html_parts.append('</ul>')
-            in_list = False
-        if stripped == '':
-            html_parts.append('<div class="h-2"></div>')
-        else:
-            html_parts.append(f'<p>{_inline_markdown(str(escape(raw_line)))}</p>')
-    if in_list:
-        html_parts.append('</ul>')
-    return Markup(''.join(html_parts))
-
-app.jinja_env.filters['markdown_lite'] = markdown_lite
 
 # Création du dossier d'upload s'il n'existe pas
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
@@ -96,7 +73,9 @@ class Classroom(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    password = db.Column(db.String(120), nullable=False)
+    # Le mot de passe n'est plus stocké ni vérifié ici : Octix s'en charge.
+    # Colonne conservée en legacy le temps de migrer les comptes existants.
+    password = db.Column(db.String(120), nullable=True)
     role = db.Column(db.String(10), nullable=False) # 'prof' ou 'eleve'
 
 class Mindmap(db.Model):
@@ -199,12 +178,7 @@ class MergeRequest(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(20), default='open') # 'open', 'merged', 'closed'
     ai_summary = db.Column(db.Text, nullable=True)     # Résumé IA du diff
-    # Instantané du code des deux branches au moment de la création de la MR.
-    # Sert à figer le diff affiché : sans ça, une fois la fusion faite, la branche
-    # source et la branche cible ont le même code et le diff "live" retombe à 0/0.
-    source_snapshot = db.Column(db.Text, nullable=True)
-    target_snapshot = db.Column(db.Text, nullable=True)
-
+    
     repo_id = db.Column(db.Integer, db.ForeignKey('repo.id'), nullable=False)
     author_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     
@@ -302,19 +276,31 @@ def home():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        username = request.form['username']
+        username = request.form['username'].strip()
         password = request.form['password']
-        user = User.query.filter_by(username=username, password=password).first()
-        
-        if user:
-            session['user_id'] = user.id
-            session['username'] = user.username
-            session['role'] = user.role
-            return redirect(url_for('dashboard'))
-        else:
-            flash('Identifiants incorrects', 'danger')
-            
-    return render_template('login.html')
+
+        ok, result = octix_login(username, password)
+        if not ok:
+            flash(result, 'danger')
+            return render_template('login.html', octix_portal_url=OCTIX_PORTAL_URL)
+
+        # Octix a validé le mot de passe : on récupère (ou crée) le profil local
+        # qui porte les infos propres à classroom.py (le rôle prof/élève).
+        user = User.query.filter_by(username=username).first()
+        if not user:
+            # Compte Octix valide mais jamais vu ici -> première connexion sur cette app.
+            # Par défaut on le crée en 'eleve' ; un prof peut ajuster le rôle ensuite.
+            user = User(username=username, role='eleve')
+            db.session.add(user)
+            db.session.commit()
+
+        session['user_id'] = user.id
+        session['username'] = user.username
+        session['role'] = user.role
+        session['octix_token'] = result  # token à réutiliser si besoin de re-vérifier plus tard
+        return redirect(url_for('dashboard'))
+
+    return render_template('login.html', octix_portal_url=OCTIX_PORTAL_URL)
 
 from sqlalchemy import or_
 
@@ -339,11 +325,7 @@ def forge():
         elif 'push_code' in request.form:
             repo_id = request.form.get('repo_id')
             branch_id = request.form.get('branch_id')
-            panel = request.form.get('panel', 'editor')
-            message = request.form.get('message', '').strip()
-            is_quick_save = 'quick_save' in request.form
-            if not message:
-                message = 'Sauvegarde rapide 💾' if is_quick_save else 'Mise à jour 💻'
+            message = request.form.get('message', 'Mise à jour 💻')
             code = request.form.get('code')
             if repo_id and code:
                 # On met à jour le code de la branche active (c'est elle qui sert de base aux diffs / merge requests)
@@ -358,8 +340,7 @@ def forge():
                 new_commit = Commit(message=commit_message, code_snapshot=code, repo_id=repo_id)
                 db.session.add(new_commit)
                 db.session.commit()
-                flash('Code enregistré ✅' if is_quick_save else 'Modifications poussées 🚀', 'success')
-                return redirect(url_for('forge', repo_id=repo_id, branch_id=branch_id, panel=panel))
+                return redirect(url_for('forge', repo_id=repo_id, branch_id=branch_id))
 
         elif 'update_visibility' in request.form:
             repo_id = request.form.get('repo_id')
@@ -378,7 +359,7 @@ def forge():
                         
                 db.session.commit()
                 flash('Paramètres de partage mis à jour !', 'success')
-                return redirect(url_for('forge', repo_id=repo_id, panel='settings'))
+                return redirect(url_for('forge', repo_id=repo_id))
 
         elif 'add_comment' in request.form:
             repo_id = request.form.get('repo_id')
@@ -388,14 +369,11 @@ def forge():
                 db.session.add(new_comment)
                 db.session.commit()
                 flash('Message posté avec succès ! 💬', 'success')
-                return redirect(url_for('forge', repo_id=repo_id, panel='discussion'))
+                return redirect(url_for('forge', repo_id=repo_id))
 
     # 2. PRÉPARATION DES DONNÉES D'AFFICHAGE (GET)
     repo_id = request.args.get('repo_id')
     selected_repo = Repo.query.get(repo_id) if repo_id else None
-    active_panel = request.args.get('panel', 'editor')
-    if active_panel not in ('editor', 'settings', 'discussion', 'changes'):
-        active_panel = 'editor'
     
     mes_repos = Repo.query.filter_by(user_id=current_user_id).all()
     shared_access = RepoAccess.query.filter_by(user_id=current_user_id).all()
@@ -438,8 +416,7 @@ def forge():
                            current_access_ids=current_access_ids,
                            branches=branches,
                            merge_requests=merge_requests,
-                           selected_branch=selected_branch,
-                           active_panel=active_panel)
+                           selected_branch=selected_branch)
 
 @app.route('/admin/classes', methods=['GET', 'POST'])
 def admin_classes():
@@ -512,35 +489,6 @@ def allowed_file(filename):
 def init_db():
     with app.app_context():
         db.create_all()
-
-        # --- Auto-migration légère et générique ---
-        # db.create_all() ne modifie pas les tables déjà existantes : si la base
-        # existe déjà (redeploy sur une base Postgres/SQLite existante), il faut
-        # ajouter à la main les colonnes ajoutées après coup dans les modèles.
-        # Plutôt que de coder en dur des noms de colonnes (fragile si un modèle
-        # change), on compare automatiquement chaque modèle à la table réelle
-        # et on ajoute toute colonne manquante, quel que soit son nom.
-        from sqlalchemy import inspect, text
-        inspector = inspect(db.engine)
-        existing_tables = set(inspector.get_table_names())
-
-        for table in db.metadata.sorted_tables:
-            if table.name not in existing_tables:
-                continue  # table toute neuve, déjà créée intégralement par create_all()
-            existing_columns = {col['name'] for col in inspector.get_columns(table.name)}
-            with db.engine.connect() as conn:
-                for column in table.columns:
-                    if column.name in existing_columns:
-                        continue
-                    col_type = column.type.compile(dialect=db.engine.dialect)
-                    try:
-                        conn.execute(text(f'ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type}'))
-                        conn.commit()
-                        print(f"[migration] colonne ajoutée : {table.name}.{column.name} ({col_type})")
-                    except Exception as e:
-                        conn.rollback()
-                        print(f"[migration] échec ajout {table.name}.{column.name} : {e}")
-
         repos = Repo.query.all()
         for repo in repos:
             has_branch = Branch.query.filter_by(repo_id=repo.id).first()
@@ -549,9 +497,13 @@ def init_db():
                 db.session.add(main_branch)
         db.session.commit()
         if not User.query.filter_by(username='prof1').first():
-            # 1. Création des utilisateurs
-            prof = User(username='prof1', password='password123', role='prof')
-            eleve = User(username='eleve1', password='password123', role='eleve')
+            # 1. Création des comptes côté Octix (idempotent : ignore si déjà existants)
+            octix_register('prof1', 'password123')
+            octix_register('eleve1', 'password123')
+
+            # 2. Profils locaux (rôle prof/élève propre à classroom.py)
+            prof = User(username='prof1', role='prof')
+            eleve = User(username='eleve1', role='eleve')
             db.session.add_all([prof, eleve])
             db.session.commit()
             
@@ -569,9 +521,9 @@ def init_db():
             db.session.add(classe_python)
             db.session.commit()
     
-    # 2. Récupère ton prof et ton élève (s'ils existent)
-            mon_prof = User.query.filter_by(username="prof1").first()
-            mon_eleve = User.query.filter_by(username="Jules").first()
+    # 2. Récupère ton prof et ton élève Jules
+            mon_prof = db.session.get(User, User.query.filter_by(username="prof1").first().id) # Ajuste le pseudo si besoin
+            mon_eleve = db.session.get(User, User.query.filter_by(username="Jules").first().id)
     
     # 3. Inscris-les de force dans la classe s'ils n'y sont pas
             if mon_prof and mon_prof not in classe_python.teachers:
@@ -819,31 +771,11 @@ def telecharger_devoir(filename):
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
-    if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password']
-        role = request.form['role'] # 'prof' ou 'eleve'
-        
-        # Vérification si les champs sont vides
-        if not username or not password or not role:
-            flash('Veuillez remplir tous les champs.', 'danger')
-            return redirect(url_for('register'))
-            
-        # Vérifier si l'utilisateur existe déjà
-        existing_user = User.query.filter_by(username=username).first()
-        if existing_user:
-            flash("Ce nom d'utilisateur est déjà pris. Choisissez-en un autre.", 'danger')
-            return redirect(url_for('register'))
-            
-        # Création du nouvel utilisateur
-        new_user = User(username=username, password=password, role=role)
-        db.session.add(new_user)
-        db.session.commit()
-        
-        flash('Votre compte a été créé avec succès ! Vous pouvez maintenant vous connecter.', 'success')
-        return redirect(url_for('login'))
-        
-    return render_template('register.html')
+    # La création de compte ne se fait plus ici : un seul endroit pour tout
+    # l'écosystème Axiom, le portail Octix. On garde cette route pour ne pas
+    # casser un éventuel lien existant vers /register, mais elle ne fait
+    # plus que rediriger.
+    return redirect(OCTIX_PORTAL_URL)
 
 @app.route('/mindmaps', methods=['GET', 'POST'])
 def mindmaps():
@@ -1031,9 +963,7 @@ def create_merge_request(repo_id):
             author_id=session['user_id'],
             source_branch_id=source_id,
             target_branch_id=target_id,
-            ai_summary=ai_summary,
-            source_snapshot=src.latest_code,
-            target_snapshot=tgt.latest_code
+            ai_summary=ai_summary
         )
         db.session.add(mr)
         db.session.commit()
@@ -1061,12 +991,8 @@ def view_merge_request(mr_id):
             flash('Commentaire ajouté ! 💬', 'success')
             return redirect(url_for('view_merge_request', mr_id=mr.id))
 
-    # Calcul du Diff : basé sur l'instantané pris à la création de la MR,
-    # pas sur l'état actuel des branches (qui redeviennent identiques après fusion).
-    # Repli sur le code live des branches pour les MR créées avant l'ajout du snapshot.
-    target_code = mr.target_snapshot if mr.target_snapshot is not None else mr.target_branch.latest_code
-    source_code = mr.source_snapshot if mr.source_snapshot is not None else mr.source_branch.latest_code
-    diff_data = generate_diff(target_code, source_code)
+    # Calcul du Diff
+    diff_data = generate_diff(mr.target_branch.latest_code, mr.source_branch.latest_code)
     
     comments = MergeComment.query.filter_by(mr_id=mr.id).order_by(MergeComment.timestamp.asc()).all()
     
@@ -1098,11 +1024,6 @@ def execute_merge(mr_id):
     flash('Fusion effectuée avec succès ! 🎉', 'success')
     return redirect(url_for('view_merge_request', mr_id=mr.id))
 
-# Initialise la base de données (crée les tables si besoin) au chargement du module.
-# Important : ceci doit s'exécuter que l'app soit lancée avec `python app.py`
-# OU importée par un serveur WSGI comme gunicorn (`gunicorn app:app`), sinon
-# les tables ne sont jamais créées en production.
-init_db()
-
 if __name__ == '__main__':
+    init_db()
     app.run(debug=True, host='0.0.0.0', port=5003)
