@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "une-cle-tres-securisee")
+app.secret_key = 'une_cle_secrete_tres_securisee'
 
 # Configuration de la base de données et des uploads
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
@@ -515,24 +515,32 @@ def init_db():
             db.session.add(classe_test)
             db.session.commit()
             print("Base de données initialisée avec prof1, eleve1 et leur Classroom !")
+
         classe_python = Classroom.query.filter_by(name="Groupe Python 🐍").first()
         if not classe_python:
             classe_python = Classroom(name="Groupe Python 🐍")
             db.session.add(classe_python)
             db.session.commit()
-    
-    # 2. Récupère ton prof et ton élève Jules
-            mon_prof = db.session.get(User, User.query.filter_by(username="prof1").first().id) # Ajuste le pseudo si besoin
-            mon_eleve = db.session.get(User, User.query.filter_by(username="Jules").first().id)
-    
-    # 3. Inscris-les de force dans la classe s'ils n'y sont pas
-            if mon_prof and mon_prof not in classe_python.teachers:
-                classe_python.teachers.append(mon_prof)
-        
-            if mon_eleve and mon_eleve not in classe_python.students:
-                classe_python.students.append(mon_eleve)
-        
+
+        # Inscrit prof1 et Jules dans la classe s'ils existent et n'y sont pas déjà.
+        # Protégé contre l'absence de "Jules" (ex: compte créé via Octix mais pas encore
+        # connecté une première fois sur classroom -> pas encore de profil local).
+        mon_prof = User.query.filter_by(username="prof1").first()
+        mon_eleve = User.query.filter_by(username="Jules").first()
+
+        if mon_prof and mon_prof not in classe_python.teachers:
+            classe_python.teachers.append(mon_prof)
+
+        if mon_eleve and mon_eleve not in classe_python.students:
+            classe_python.students.append(mon_eleve)
+
         db.session.commit()
+
+# Sur Render (et avec gunicorn en général), le bloc `if __name__ == '__main__':`
+# plus bas n'est JAMAIS exécuté : gunicorn importe ce module et n'appelle jamais
+# app.run(). init_db() doit donc être appelée ici, au chargement du module,
+# qui a lieu dans les deux cas (lancement local ET gunicorn).
+init_db()
 
 # ----------------------------------------------------
 # MODULE 1 : LES COURS
@@ -1025,5 +1033,4 @@ def execute_merge(mr_id):
     return redirect(url_for('view_merge_request', mr_id=mr.id))
 
 if __name__ == '__main__':
-    init_db()
     app.run(debug=True, host='0.0.0.0', port=5003)
