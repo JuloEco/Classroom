@@ -5,7 +5,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = 'une_cle_secrete_tres_securisee'
+app.secret_key = os.environ.get("SECRET_KEY", "une-cle-tres-securisee")
 
 # Configuration de la base de données et des uploads
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
