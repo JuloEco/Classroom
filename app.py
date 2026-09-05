@@ -42,6 +42,23 @@ def octix_login(username, password):
     except requests.exceptions.RequestException:
         return False, "Le service Octix est injoignable. Réessaie plus tard."
 
+
+def octix_get_classroom_role(token):
+    """Récupère le rôle Classroom (prof/eleve) choisi sur Octix. Retourne 'eleve' par défaut si indisponible."""
+    try:
+        r = requests.get(
+            f"{OCTIX_URL}/account/me",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=5,
+        )
+        if r.status_code == 200:
+            role = r.json().get("classroom_role")
+            if role in ("prof", "eleve"):
+                return role
+    except requests.exceptions.RequestException:
+        pass
+    return "eleve"
+
 db = SQLAlchemy(app)
 
 # Création du dossier d'upload s'il n'existe pas
@@ -286,12 +303,19 @@ def login():
 
         # Octix a validé le mot de passe : on récupère (ou crée) le profil local
         # qui porte les infos propres à classroom.py (le rôle prof/élève).
+        # Le rôle choisi à l'inscription (ou modifié depuis) vit sur Octix : on va
+        # le chercher via /account/me au lieu de le deviner.
+        classroom_role = octix_get_classroom_role(result)
+
         user = User.query.filter_by(username=username).first()
         if not user:
             # Compte Octix valide mais jamais vu ici -> première connexion sur cette app.
-            # Par défaut on le crée en 'eleve' ; un prof peut ajuster le rôle ensuite.
-            user = User(username=username, role='eleve')
+            user = User(username=username, role=classroom_role)
             db.session.add(user)
+            db.session.commit()
+        elif user.role != classroom_role:
+            # Le rôle a été changé côté Octix (page "mon compte") : on resynchronise.
+            user.role = classroom_role
             db.session.commit()
 
         session['user_id'] = user.id
