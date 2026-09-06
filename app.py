@@ -8,12 +8,7 @@ app = Flask(__name__)
 app.secret_key = 'une_cle_secrete_tres_securisee'
 
 # Configuration de la base de données et des uploads
-database_url = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
-# Neon (et d'autres) fournissent parfois une URL en "postgres://",
-# alors que SQLAlchemy exige le préfixe "postgresql://"
-if database_url.startswith('postgres://'):
-    database_url = database_url.replace('postgres://', 'postgresql://', 1)
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'zip', 'py'}
@@ -26,11 +21,24 @@ OCTIX_URL = os.environ.get("OCTIX_URL", "http://localhost:5050")
 OCTIX_PORTAL_URL = os.environ.get("OCTIX_PORTAL_URL", "http://localhost:5051")
 
 
-def octix_register(username, password):
-    """Crée le compte côté Octix. Retourne (ok, message)."""
+def octix_register(username, password, email, classroom_role):
+    """Crée le compte côté Octix. Retourne (ok, message).
+
+    Octix exige username, password, email ET classroom_role (voir son
+    /register) : un appel qui n'envoie que username/password échoue à
+    coup sûr avec 400, ce n'est pas un problème réseau. C'était le bug
+    du seed de test : octix_register('prof1', 'password123') sans email
+    ni classroom_role ne pouvait jamais réussir."""
     try:
-        r = requests.post(f"{OCTIX_URL}/register", json={"username": username, "password": password}, timeout=5)
+        r = requests.post(
+            f"{OCTIX_URL}/register",
+            json={"username": username, "password": password, "email": email, "classroom_role": classroom_role},
+            timeout=5,
+        )
         if r.status_code == 201:
+            return True, None
+        if r.status_code == 409:
+            # Compte déjà existant côté Octix : pas une erreur pour un seed idempotent.
             return True, None
         return False, r.json().get("error", "Erreur inconnue lors de la création du compte.")
     except requests.exceptions.RequestException:
@@ -95,23 +103,10 @@ class Classroom(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # Colonnes réelles de la table "user", partagée avec Octix (source de vérité
-    # pour les comptes). classroom.py ne lit/écrit jamais password_hash ni email :
-    # seul Octix gère l'authentification. classroom_role est l'info qui nous
-    # intéresse ici, exposée sous le nom historique `.role` via la propriété
-    # ci-dessous pour ne pas avoir à toucher tout le reste du fichier.
-    email = db.Column(db.String(255), unique=True, nullable=True)
-    classroom_role = db.Column(db.String(20), nullable=True)
-    password_hash = db.Column(db.String(255), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=True)
-
-    @property
-    def role(self):
-        return self.classroom_role
-
-    @role.setter
-    def role(self, value):
-        self.classroom_role = value
+    # Le mot de passe n'est plus stocké ni vérifié ici : Octix s'en charge.
+    # Colonne conservée en legacy le temps de migrer les comptes existants.
+    password = db.Column(db.String(120), nullable=True)
+    role = db.Column(db.String(10), nullable=False) # 'prof' ou 'eleve'
 
 class Mindmap(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -327,12 +322,10 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if not user:
-            # Ne devrait jamais arriver : si octix_login a réussi, la ligne existe
-            # forcément déjà dans cette table (c'est elle qu'Octix vient d'authentifier).
-            # On ne la crée surtout pas ici : password_hash est NOT NULL côté base
-            # réelle, et classroom.py n'a pas accès au hash du mot de passe.
-            flash("Compte introuvable côté classroom. Réessaie ou contacte un admin.", 'danger')
-            return render_template('login.html', octix_portal_url=OCTIX_PORTAL_URL)
+            # Compte Octix valide mais jamais vu ici -> première connexion sur cette app.
+            user = User(username=username, role=classroom_role)
+            db.session.add(user)
+            db.session.commit()
         elif user.role != classroom_role:
             # Le rôle a été changé côté Octix (page "mon compte") : on resynchronise.
             user.role = classroom_role
@@ -529,8 +522,25 @@ def mes_classes():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# Insertion de données de test à l'initialisation
-def init_db():
+# ----------------------------------------------------
+# Initialisation : deux étapes bien séparées.
+#
+# create_tables() est sans danger à rejouer à chaque démarrage : elle ne
+# crée que le schéma manquant (db.create_all()) et répare les Repo sans
+# Branch "main". Elle ne dépend d'aucun service externe et ne peut pas
+# planter au démarrage.
+#
+# seed_test_data() crée les comptes de démo (prof1/eleve1) UNIQUEMENT
+# s'ils n'existent pas encore, et seulement si Octix confirme la
+# création (ou confirme qu'ils existent déjà côté Octix). Si Octix est
+# injoignable ou refuse, on log un avertissement et on s'arrête là :
+# on ne crée plus de profil Classroom local pour un compte qui n'existe
+# pas côté Octix (c'est cette incohérence qui provoquait le
+# FlushError: Can't flush None value found in collection
+# Classroom.students).
+# ----------------------------------------------------
+
+def create_tables():
     with app.app_context():
         db.create_all()
         repos = Repo.query.all()
@@ -540,38 +550,37 @@ def init_db():
                 main_branch = Branch(name="main", repo_id=repo.id, latest_code="# Code initial")
                 db.session.add(main_branch)
         db.session.commit()
+
+
+def seed_test_data():
+    with app.app_context():
         if not User.query.filter_by(username='prof1').first():
-            # 1. Création des comptes côté Octix (idempotent : ignore si déjà existants).
-            # Octix insère directement la ligne dans la table "user", partagée avec
-            # classroom.py : on ne la recrée surtout pas nous-mêmes ensuite (double
-            # INSERT sur le même username -> UniqueViolation).
-            octix_register('prof1', 'password123')
-            octix_register('eleve1', 'password123')
+            # 1. Comptes côté Octix (idempotent : un 409 "déjà existant" est traité
+            #    comme un succès par octix_register). On vérifie bien le résultat
+            #    cette fois, au lieu de l'ignorer.
+            ok_prof, msg_prof = octix_register('prof1', 'password123', 'prof1@example.com', 'prof')
+            ok_eleve, msg_eleve = octix_register('eleve1', 'password123', 'eleve1@example.com', 'eleve')
 
-            # 2. On relit les profils que Octix vient de créer, pour leur assigner
-            # un rôle classroom (email/password_hash restent gérés par Octix seul).
-            prof = User.query.filter_by(username='prof1').first()
-            eleve = User.query.filter_by(username='eleve1').first()
-            if prof and eleve:
-                prof.role = 'prof'
-                eleve.role = 'eleve'
-                db.session.commit()
-            else:
-                app.logger.warning("Octix injoignable ou échec d'inscription : seed prof1/eleve1 ignoré.")
+            if not (ok_prof and ok_eleve):
+                app.logger.warning(
+                    "Octix injoignable ou échec d'inscription : seed prof1/eleve1 ignoré (%s / %s).",
+                    msg_prof, msg_eleve,
+                )
+                return
 
-            # 2. Création d'une classe de test et assignation
-            # (vérifie l'existence indépendamment de prof1, car les deux tables
-            # peuvent être désynchronisées après une intervention manuelle sur le schéma)
-            classe_test = Classroom.query.filter_by(name="Groupe Python 🐍").first()
-            if not classe_test:
-                classe_test = Classroom(name="Groupe Python 🐍")
-                db.session.add(classe_test)
+            # 2. Profils locaux (rôle prof/élève propre à classroom.py) — créés
+            #    seulement maintenant qu'on sait que les comptes Octix existent.
+            prof = User(username='prof1', role='prof')
+            eleve = User(username='eleve1', role='eleve')
+            db.session.add_all([prof, eleve])
+            db.session.commit()
 
-            if prof not in classe_test.teachers:
-                classe_test.teachers.append(prof)
-            if eleve not in classe_test.students:
-                classe_test.students.append(eleve)
+            # 3. Création d'une classe de test et assignation
+            classe_test = Classroom(name="Groupe Python 🐍")
+            classe_test.teachers.append(prof)
+            classe_test.students.append(eleve)
 
+            db.session.add(classe_test)
             db.session.commit()
             print("Base de données initialisée avec prof1, eleve1 et leur Classroom !")
 
@@ -595,11 +604,18 @@ def init_db():
 
         db.session.commit()
 
+
 # Sur Render (et avec gunicorn en général), le bloc `if __name__ == '__main__':`
 # plus bas n'est JAMAIS exécuté : gunicorn importe ce module et n'appelle jamais
-# app.run(). init_db() doit donc être appelée ici, au chargement du module,
-# qui a lieu dans les deux cas (lancement local ET gunicorn).
-init_db()
+# app.run(). create_tables() et seed_test_data() doivent donc être appelées ici,
+# au chargement du module, qui a lieu dans les deux cas (lancement local ET
+# gunicorn). create_tables() tourne toujours ; seed_test_data() ne doit jamais
+# faire planter le démarrage même si Octix est indisponible (voir plus haut).
+create_tables()
+try:
+    seed_test_data()
+except Exception:
+    app.logger.exception("Échec du seed de test au démarrage — l'app démarre quand même.")
 
 # ----------------------------------------------------
 # MODULE 1 : LES COURS
