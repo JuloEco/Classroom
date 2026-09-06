@@ -535,13 +535,20 @@ def init_db():
             eleve = User(username='eleve1', role='eleve')
             db.session.add_all([prof, eleve])
             db.session.commit()
-            
+
             # 2. Création d'une classe de test et assignation
-            classe_test = Classroom(name="Groupe Python 🐍")
-            classe_test.teachers.append(prof)
-            classe_test.students.append(eleve)
-            
-            db.session.add(classe_test)
+            # (vérifie l'existence indépendamment de prof1, car les deux tables
+            # peuvent être désynchronisées après une intervention manuelle sur le schéma)
+            classe_test = Classroom.query.filter_by(name="Groupe Python 🐍").first()
+            if not classe_test:
+                classe_test = Classroom(name="Groupe Python 🐍")
+                db.session.add(classe_test)
+
+            if prof not in classe_test.teachers:
+                classe_test.teachers.append(prof)
+            if eleve not in classe_test.students:
+                classe_test.students.append(eleve)
+
             db.session.commit()
             print("Base de données initialisée avec prof1, eleve1 et leur Classroom !")
 
