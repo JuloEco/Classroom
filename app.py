@@ -8,7 +8,12 @@ app = Flask(__name__)
 app.secret_key = 'une_cle_secrete_tres_securisee'
 
 # Configuration de la base de données et des uploads
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+database_url = os.environ.get('DATABASE_URL', 'sqlite:///database.db')
+# Neon (et d'autres) fournissent parfois une URL en "postgres://",
+# alors que SQLAlchemy exige le préfixe "postgresql://"
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'zip', 'py'}
