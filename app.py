@@ -95,10 +95,23 @@ class Classroom(db.Model):
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    # Le mot de passe n'est plus stocké ni vérifié ici : Octix s'en charge.
-    # Colonne conservée en legacy le temps de migrer les comptes existants.
-    password = db.Column(db.String(120), nullable=True)
-    role = db.Column(db.String(10), nullable=False) # 'prof' ou 'eleve'
+    # Colonnes réelles de la table "user", partagée avec Octix (source de vérité
+    # pour les comptes). classroom.py ne lit/écrit jamais password_hash ni email :
+    # seul Octix gère l'authentification. classroom_role est l'info qui nous
+    # intéresse ici, exposée sous le nom historique `.role` via la propriété
+    # ci-dessous pour ne pas avoir à toucher tout le reste du fichier.
+    email = db.Column(db.String(255), unique=True, nullable=True)
+    classroom_role = db.Column(db.String(20), nullable=True)
+    password_hash = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=True)
+
+    @property
+    def role(self):
+        return self.classroom_role
+
+    @role.setter
+    def role(self, value):
+        self.classroom_role = value
 
 class Mindmap(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -314,10 +327,12 @@ def login():
 
         user = User.query.filter_by(username=username).first()
         if not user:
-            # Compte Octix valide mais jamais vu ici -> première connexion sur cette app.
-            user = User(username=username, role=classroom_role)
-            db.session.add(user)
-            db.session.commit()
+            # Ne devrait jamais arriver : si octix_login a réussi, la ligne existe
+            # forcément déjà dans cette table (c'est elle qu'Octix vient d'authentifier).
+            # On ne la crée surtout pas ici : password_hash est NOT NULL côté base
+            # réelle, et classroom.py n'a pas accès au hash du mot de passe.
+            flash("Compte introuvable côté classroom. Réessaie ou contacte un admin.", 'danger')
+            return render_template('login.html', octix_portal_url=OCTIX_PORTAL_URL)
         elif user.role != classroom_role:
             # Le rôle a été changé côté Octix (page "mon compte") : on resynchronise.
             user.role = classroom_role
@@ -526,15 +541,23 @@ def init_db():
                 db.session.add(main_branch)
         db.session.commit()
         if not User.query.filter_by(username='prof1').first():
-            # 1. Création des comptes côté Octix (idempotent : ignore si déjà existants)
+            # 1. Création des comptes côté Octix (idempotent : ignore si déjà existants).
+            # Octix insère directement la ligne dans la table "user", partagée avec
+            # classroom.py : on ne la recrée surtout pas nous-mêmes ensuite (double
+            # INSERT sur le même username -> UniqueViolation).
             octix_register('prof1', 'password123')
             octix_register('eleve1', 'password123')
 
-            # 2. Profils locaux (rôle prof/élève propre à classroom.py)
-            prof = User(username='prof1', role='prof')
-            eleve = User(username='eleve1', role='eleve')
-            db.session.add_all([prof, eleve])
-            db.session.commit()
+            # 2. On relit les profils que Octix vient de créer, pour leur assigner
+            # un rôle classroom (email/password_hash restent gérés par Octix seul).
+            prof = User.query.filter_by(username='prof1').first()
+            eleve = User.query.filter_by(username='eleve1').first()
+            if prof and eleve:
+                prof.role = 'prof'
+                eleve.role = 'eleve'
+                db.session.commit()
+            else:
+                app.logger.warning("Octix injoignable ou échec d'inscription : seed prof1/eleve1 ignoré.")
 
             # 2. Création d'une classe de test et assignation
             # (vérifie l'existence indépendamment de prof1, car les deux tables
