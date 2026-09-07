@@ -12,7 +12,7 @@
 
 <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden grid grid-cols-1 md:grid-cols-3 h-[600px]">
     
-    <div class="border-b md:border-b-0 md:border-r border-gray-200 bg-gray-50 flex flex-col h-full overflow-y-auto">
+    <div class="border-b md:border-b-0 md:border-r border-gray-200 bg-gray-50 flex flex-col h-full min-h-0 overflow-y-auto">
         <div class="p-4 border-b border-gray-200 bg-white">
             <h3 class="font-bold text-gray-700 text-sm uppercase tracking-wider">Vos Contacts disponibles</h3>
         </div>
@@ -37,9 +37,9 @@
         </div>
     </div>
 
-    <div class="md:col-span-2 flex flex-col h-full bg-gray-100">
+    <div class="md:col-span-2 flex flex-col h-full min-h-0 bg-gray-100">
         
-        <div class="flex-grow p-6 overflow-y-auto space-y-4 flex flex-col justify-end">
+        <div class="flex-grow min-h-0 p-6 overflow-y-auto space-y-4 flex flex-col justify-end">
             {% if not messages %}
                 <div class="text-center py-12 text-gray-400 my-auto">
                     <p class="text-4xl mb-2">💬</p>
