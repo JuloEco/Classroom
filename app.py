@@ -290,6 +290,18 @@ def home():
         return redirect(url_for('dashboard'))
     return redirect(url_for('login'))
 
+@app.before_request
+def verifier_session_utilisateur():
+    """Si la session contient un user_id qui ne correspond plus à personne en
+    base (compte supprimé, base réinitialisée, etc.), on nettoie la session
+    au lieu de laisser chaque route planter avec un current_user = None."""
+    if 'user_id' in session:
+        current_user = db.session.get(User, session['user_id'])
+        if current_user is None:
+            session.clear()
+            flash('Votre session a expiré, veuillez vous reconnecter.', 'error')
+            return redirect(url_for('login'))
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -765,13 +777,6 @@ def messagerie():
     # Pour l'affichage de la liste des contacts dispos
     # Pour l'affichage de la liste des contacts dispos (filtré par classe)
     current_user = db.session.get(User, session['user_id'])
-    if current_user is None:
-        # La session pointe vers un utilisateur qui n'existe plus (ex: compte supprimé).
-        # On nettoie la session et on renvoie vers la connexion plutôt que de crasher.
-        session.clear()
-        flash('Votre session a expiré, veuillez vous reconnecter.', 'error')
-        return redirect(url_for('login'))
-
     contacts = []
 
     if session['role'] == 'prof':
