@@ -21,24 +21,11 @@ OCTIX_URL = os.environ.get("OCTIX_URL", "http://localhost:5050")
 OCTIX_PORTAL_URL = os.environ.get("OCTIX_PORTAL_URL", "http://localhost:5051")
 
 
-def octix_register(username, password, email, classroom_role):
-    """Crée le compte côté Octix. Retourne (ok, message).
-
-    Octix exige username, password, email ET classroom_role (voir son
-    /register) : un appel qui n'envoie que username/password échoue à
-    coup sûr avec 400, ce n'est pas un problème réseau. C'était le bug
-    du seed de test : octix_register('prof1', 'password123') sans email
-    ni classroom_role ne pouvait jamais réussir."""
+def octix_register(username, password):
+    """Crée le compte côté Octix. Retourne (ok, message)."""
     try:
-        r = requests.post(
-            f"{OCTIX_URL}/register",
-            json={"username": username, "password": password, "email": email, "classroom_role": classroom_role},
-            timeout=5,
-        )
+        r = requests.post(f"{OCTIX_URL}/register", json={"username": username, "password": password}, timeout=5)
         if r.status_code == 201:
-            return True, None
-        if r.status_code == 409:
-            # Compte déjà existant côté Octix : pas une erreur pour un seed idempotent.
             return True, None
         return False, r.json().get("error", "Erreur inconnue lors de la création du compte.")
     except requests.exceptions.RequestException:
@@ -522,25 +509,8 @@ def mes_classes():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
-# ----------------------------------------------------
-# Initialisation : deux étapes bien séparées.
-#
-# create_tables() est sans danger à rejouer à chaque démarrage : elle ne
-# crée que le schéma manquant (db.create_all()) et répare les Repo sans
-# Branch "main". Elle ne dépend d'aucun service externe et ne peut pas
-# planter au démarrage.
-#
-# seed_test_data() crée les comptes de démo (prof1/eleve1) UNIQUEMENT
-# s'ils n'existent pas encore, et seulement si Octix confirme la
-# création (ou confirme qu'ils existent déjà côté Octix). Si Octix est
-# injoignable ou refuse, on log un avertissement et on s'arrête là :
-# on ne crée plus de profil Classroom local pour un compte qui n'existe
-# pas côté Octix (c'est cette incohérence qui provoquait le
-# FlushError: Can't flush None value found in collection
-# Classroom.students).
-# ----------------------------------------------------
-
-def create_tables():
+# Insertion de données de test à l'initialisation
+def init_db():
     with app.app_context():
         db.create_all()
         repos = Repo.query.all()
@@ -550,36 +520,22 @@ def create_tables():
                 main_branch = Branch(name="main", repo_id=repo.id, latest_code="# Code initial")
                 db.session.add(main_branch)
         db.session.commit()
-
-
-def seed_test_data():
-    with app.app_context():
         if not User.query.filter_by(username='prof1').first():
-            # 1. Comptes côté Octix (idempotent : un 409 "déjà existant" est traité
-            #    comme un succès par octix_register). On vérifie bien le résultat
-            #    cette fois, au lieu de l'ignorer.
-            ok_prof, msg_prof = octix_register('prof1', 'password123', 'prof1@example.com', 'prof')
-            ok_eleve, msg_eleve = octix_register('eleve1', 'password123', 'eleve1@example.com', 'eleve')
+            # 1. Création des comptes côté Octix (idempotent : ignore si déjà existants)
+            octix_register('prof1', 'password123')
+            octix_register('eleve1', 'password123')
 
-            if not (ok_prof and ok_eleve):
-                app.logger.warning(
-                    "Octix injoignable ou échec d'inscription : seed prof1/eleve1 ignoré (%s / %s).",
-                    msg_prof, msg_eleve,
-                )
-                return
-
-            # 2. Profils locaux (rôle prof/élève propre à classroom.py) — créés
-            #    seulement maintenant qu'on sait que les comptes Octix existent.
+            # 2. Profils locaux (rôle prof/élève propre à classroom.py)
             prof = User(username='prof1', role='prof')
             eleve = User(username='eleve1', role='eleve')
             db.session.add_all([prof, eleve])
             db.session.commit()
-
-            # 3. Création d'une classe de test et assignation
+            
+            # 2. Création d'une classe de test et assignation
             classe_test = Classroom(name="Groupe Python 🐍")
             classe_test.teachers.append(prof)
             classe_test.students.append(eleve)
-
+            
             db.session.add(classe_test)
             db.session.commit()
             print("Base de données initialisée avec prof1, eleve1 et leur Classroom !")
@@ -604,18 +560,11 @@ def seed_test_data():
 
         db.session.commit()
 
-
 # Sur Render (et avec gunicorn en général), le bloc `if __name__ == '__main__':`
 # plus bas n'est JAMAIS exécuté : gunicorn importe ce module et n'appelle jamais
-# app.run(). create_tables() et seed_test_data() doivent donc être appelées ici,
-# au chargement du module, qui a lieu dans les deux cas (lancement local ET
-# gunicorn). create_tables() tourne toujours ; seed_test_data() ne doit jamais
-# faire planter le démarrage même si Octix est indisponible (voir plus haut).
-create_tables()
-try:
-    seed_test_data()
-except Exception:
-    app.logger.exception("Échec du seed de test au démarrage — l'app démarre quand même.")
+# app.run(). init_db() doit donc être appelée ici, au chargement du module,
+# qui a lieu dans les deux cas (lancement local ET gunicorn).
+init_db()
 
 # ----------------------------------------------------
 # MODULE 1 : LES COURS
@@ -816,6 +765,13 @@ def messagerie():
     # Pour l'affichage de la liste des contacts dispos
     # Pour l'affichage de la liste des contacts dispos (filtré par classe)
     current_user = db.session.get(User, session['user_id'])
+    if current_user is None:
+        # La session pointe vers un utilisateur qui n'existe plus (ex: compte supprimé).
+        # On nettoie la session et on renvoie vers la connexion plutôt que de crasher.
+        session.clear()
+        flash('Votre session a expiré, veuillez vous reconnecter.', 'error')
+        return redirect(url_for('login'))
+
     contacts = []
 
     if session['role'] == 'prof':
