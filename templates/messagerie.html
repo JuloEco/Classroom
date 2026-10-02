@@ -39,27 +39,27 @@
 
     <div class="flex-1 min-w-0 min-h-0 flex flex-col bg-gray-100">
         
-        <div id="messages-container" class="flex-1 min-h-0 p-6 overflow-y-auto">
+        <div id="messages-container" class="flex-1 min-h-0 p-6 overflow-y-auto overflow-x-hidden">
             {% if not messages %}
                 <div class="text-center py-12 text-gray-400">
                     <p class="text-4xl mb-2">💬</p>
                     <p class="text-sm">Aucun message pour le moment. Lancez la discussion ci-dessous !</p>
                 </div>
             {% else %}
-                <div class="space-y-3 w-full">
+                <div class="space-y-3 w-full min-w-0">
                     {% for msg, user in messages %}
                         {% if msg.sender_id == current_user_id %}
                             <div class="flex flex-col items-end">
-                                <div class="bg-indigo-600 text-white px-4 py-2 rounded-2xl rounded-tr-none max-w-md shadow-sm">
-                                    <p class="text-sm leading-relaxed">{{ msg.content }}</p>
+                                <div class="bg-indigo-600 text-white px-4 py-2 rounded-2xl rounded-tr-none max-w-[85%] md:max-w-md min-w-0 shadow-sm">
+                                    <p class="text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{{ msg.content }}</p>
                                 </div>
                                 <span class="text-[10px] text-gray-400 mt-1 mr-1">Vous • {{ msg.timestamp.strftime('%H:%M') }}</span>
                             </div>
                         {% else %}
                             <div class="flex flex-col items-start">
                                 <span class="text-[10px] text-gray-500 font-semibold mb-0.5 ml-1">{{ user.username }}</span>
-                                <div class="bg-white text-gray-800 px-4 py-2 rounded-2xl rounded-tl-none max-w-md border border-gray-200 shadow-sm">
-                                    <p class="text-sm leading-relaxed">{{ msg.content }}</p>
+                                <div class="bg-white text-gray-800 px-4 py-2 rounded-2xl rounded-tl-none max-w-[85%] md:max-w-md min-w-0 border border-gray-200 shadow-sm">
+                                    <p class="text-sm leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]">{{ msg.content }}</p>
                                 </div>
                                 <span class="text-[10px] text-gray-400 mt-1 ml-1">{{ msg.timestamp.strftime('%H:%M') }}</span>
                             </div>
