@@ -22,9 +22,15 @@ DATA_DIR = os.environ.get('DATA_DIR')
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
-    # Certains hébergeurs fournissent encore l'ancien schéma "postgres://"
+    # Certains hébergeurs fournissent l'ancien schéma "postgres://". Sans driver
+    # précisé, SQLAlchemy prend psycopg2 : si seul psycopg (v3) est installé (cas
+    # fréquent avec Python 3.13+), on choisit donc le bon driver à la place.
     if DATABASE_URL.startswith('postgres://'):
-        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+        DATABASE_URL = 'postgresql://' + DATABASE_URL[len('postgres://'):]
+    if DATABASE_URL.startswith('postgresql://'):
+        import importlib.util
+        if importlib.util.find_spec('psycopg2') is None and importlib.util.find_spec('psycopg') is not None:
+            DATABASE_URL = 'postgresql+psycopg://' + DATABASE_URL[len('postgresql://'):]
     app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 elif DATA_DIR:
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -554,16 +560,47 @@ def mes_classes():
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
+def sql_ajout_colonne(dialect, table, col):
+    """Construit l'instruction ALTER TABLE ... ADD COLUMN pour une colonne du modèle.
+    La colonne est ajoutée sans NOT NULL : sur une table déjà remplie, PostgreSQL
+    refuserait d'ajouter une colonne obligatoire sans valeur."""
+    q = dialect.identifier_preparer.quote
+    sql = f"ALTER TABLE {q(table.name)} ADD COLUMN {q(col.name)} {col.type.compile(dialect=dialect)}"
+    for fk in col.foreign_keys:
+        sql += f" REFERENCES {q(fk.column.table.name)} ({q(fk.column.name)})"
+    return sql
+
+
+def ajouter_colonnes_manquantes():
+    """Migration légère : ajoute à chaque table existante les colonnes présentes dans
+    les modèles mais absentes de la base. Ne supprime ni ne modifie rien."""
+    insp = inspect(db.engine)
+    existantes = set(insp.get_table_names())
+    for table in db.metadata.sorted_tables:
+        if table.name not in existantes:
+            continue  # table neuve : create_all() vient de la créer complète
+        presentes = {c['name'] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in presentes:
+                continue
+            with db.engine.begin() as conn:
+                conn.execute(text(sql_ajout_colonne(db.engine.dialect, table, col)))
+                # Colonne obligatoire avec valeur par défaut Python : on remplit les
+                # lignes existantes pour que le modèle reste cohérent.
+                if not col.nullable and col.default is not None and col.default.is_scalar:
+                    conn.execute(table.update().values({col.name: col.default.arg}))
+            print(f"Migration : colonne {table.name}.{col.name} ajoutée.")
+
+
 # Insertion de données de test à l'initialisation
 def init_db():
     with app.app_context():
         db.create_all()
-        # create_all() ne modifie pas une table existante : on ajoute à la main la
-        # colonne classroom_id sur les bases créées avant ce correctif.
-        colonnes = {c['name'] for c in inspect(db.engine).get_columns('assignment')}
-        if 'classroom_id' not in colonnes:
-            db.session.execute(text('ALTER TABLE assignment ADD COLUMN classroom_id INTEGER REFERENCES classroom(id)'))
-            db.session.commit()
+        # create_all() ne modifie jamais une table qui existe déjà : sur une base créée
+        # avec une ancienne version du code (ex. PostgreSQL sur Render), les colonnes
+        # ajoutées depuis (user.password, assignment.classroom_id...) manquent et toute
+        # requête plante. On les ajoute donc ici, avant la moindre requête.
+        ajouter_colonnes_manquantes()
         repos = Repo.query.all()
         for repo in repos:
             has_branch = Branch.query.filter_by(repo_id=repo.id).first()
