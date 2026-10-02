@@ -8,10 +8,36 @@ from sqlalchemy import and_, inspect, or_, text
 app = Flask(__name__)
 app.secret_key = 'une_cle_secrete_tres_securisee'
 
-# Configuration de la base de données et des uploads
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+# ----------------------------------------------------
+# PERSISTANCE DES DONNÉES (classes, inscriptions, devoirs, copies)
+# ----------------------------------------------------
+# Par défaut les données sont dans un fichier SQLite local : parfait en local, mais
+# sur un hébergeur à disque éphémère (Render, Vercel...) ce fichier est EFFACÉ à
+# chaque redéploiement / redémarrage, et avec lui les classes et les élèves inscrits.
+# Pour que tout soit conservé, définir l'une de ces variables d'environnement :
+#   - DATABASE_URL : URL d'une base PostgreSQL hébergée (recommandé en production)
+#   - DATA_DIR     : dossier persistant (ex. disque monté sur Render) qui contiendra
+#                    la base SQLite ET les fichiers rendus par les élèves
+DATA_DIR = os.environ.get('DATA_DIR')
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    # Certains hébergeurs fournissent encore l'ancien schéma "postgres://"
+    if DATABASE_URL.startswith('postgres://'):
+        DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+elif DATA_DIR:
+    os.makedirs(DATA_DIR, exist_ok=True)
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(os.path.abspath(DATA_DIR), 'database.db')
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
+
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['UPLOAD_FOLDER'] = os.path.join(
+    os.path.abspath(DATA_DIR) if DATA_DIR else os.path.dirname(os.path.abspath(__file__)),
+    'uploads'
+)
 app.config['ALLOWED_EXTENSIONS'] = {'pdf', 'png', 'jpg', 'jpeg', 'docx', 'txt', 'zip', 'py'}
 
 # ----------------------------------------------------
@@ -45,7 +71,10 @@ def octix_login(username, password):
 
 
 def octix_get_classroom_role(token):
-    """Récupère le rôle Classroom (prof/eleve) choisi sur Octix. Retourne 'eleve' par défaut si indisponible."""
+    """Récupère le rôle Classroom (prof/eleve) choisi sur Octix.
+    Retourne None si Octix ne répond pas ou ne donne pas de rôle valide : l'appelant
+    doit alors CONSERVER le rôle déjà enregistré (sinon une simple panne d'Octix
+    transformait les profs en élèves, qui ne pouvaient plus créer de devoirs)."""
     try:
         r = requests.get(
             f"{OCTIX_URL}/account/me",
@@ -58,7 +87,7 @@ def octix_get_classroom_role(token):
                 return role
     except requests.exceptions.RequestException:
         pass
-    return "eleve"
+    return None
 
 db = SQLAlchemy(app)
 
@@ -327,10 +356,10 @@ def login():
         user = User.query.filter_by(username=username).first()
         if not user:
             # Compte Octix valide mais jamais vu ici -> première connexion sur cette app.
-            user = User(username=username, role=classroom_role)
+            user = User(username=username, role=classroom_role or 'eleve')
             db.session.add(user)
             db.session.commit()
-        elif user.role != classroom_role:
+        elif classroom_role and user.role != classroom_role:
             # Le rôle a été changé côté Octix (page "mon compte") : on resynchronise.
             user.role = classroom_role
             db.session.commit()
@@ -724,10 +753,13 @@ def devoirs():
     rendus = []
     mes_rendus = {}
     classes_prof = []
+    classe_preselect = None
 
     if session['role'] == 'prof':
         classes_prof = classes_du_prof(current_user)
         ids_classes = [c.id for c in classes_prof]
+        demande = request.args.get('classe', type=int)
+        classe_preselect = demande if demande in ids_classes else None
         visibles = ids_eleves_visibles_par_prof(current_user)
 
         rendus = db.session.query(Submission, User, Assignment).\
@@ -748,6 +780,7 @@ def devoirs():
                            rendus=rendus,
                            mes_rendus=mes_rendus,
                            classes_prof=classes_prof,
+                           classe_preselect=classe_preselect,
                            role=session['role'])
 
 
