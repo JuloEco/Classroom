@@ -1,8 +1,9 @@
 import os
 import requests
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, session, flash, send_from_directory, abort
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from sqlalchemy import and_, inspect, or_, text
 
 app = Flask(__name__)
 app.secret_key = 'une_cle_secrete_tres_securisee'
@@ -110,6 +111,10 @@ class Assignment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text, nullable=False)
+    # Classe à laquelle le devoir est destiné. NULL = ancien devoir créé avant
+    # cette colonne : il reste visible de tous les élèves (rétro-compatibilité).
+    classroom_id = db.Column(db.Integer, db.ForeignKey('classroom.id'), nullable=True)
+    classroom = db.relationship('Classroom')
 
 class Submission(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -338,7 +343,6 @@ def login():
 
     return render_template('login.html', octix_portal_url=OCTIX_PORTAL_URL)
 
-from sqlalchemy import or_
 
 @app.route('/forge', methods=['GET', 'POST'])
 def forge():
@@ -525,6 +529,12 @@ def allowed_file(filename):
 def init_db():
     with app.app_context():
         db.create_all()
+        # create_all() ne modifie pas une table existante : on ajoute à la main la
+        # colonne classroom_id sur les bases créées avant ce correctif.
+        colonnes = {c['name'] for c in inspect(db.engine).get_columns('assignment')}
+        if 'classroom_id' not in colonnes:
+            db.session.execute(text('ALTER TABLE assignment ADD COLUMN classroom_id INTEGER REFERENCES classroom(id)'))
+            db.session.commit()
         repos = Repo.query.all()
         for repo in repos:
             has_branch = Branch.query.filter_by(repo_id=repo.id).first()
@@ -646,54 +656,98 @@ def supprimer_flashcard(id):
 # MODULE 2 : LES DEVOIRS & SOUMISSIONS
 # ----------------------------------------------------
 
+def classes_du_prof(user):
+    """Classes dont l'utilisateur est enseignant."""
+    return user.classes_as_teacher.all()
+
+
+def ids_classes_eleve(user):
+    """IDs des classes dont l'utilisateur est élève."""
+    return [c.id for c in user.classes_as_student]
+
+
+def ids_eleves_visibles_par_prof(prof):
+    """Élèves dont un prof peut voir les copies : ceux de ses classes, plus les élèves
+    sans aucune classe (sinon leurs copies n'arriveraient jamais à personne)."""
+    ids = set()
+    for classe in prof.classes_as_teacher:
+        for student in classe.students:
+            ids.add(student.id)
+    avec_classe = db.session.query(student_classroom.c.user_id)
+    ids |= {u.id for u in User.query.filter(User.role == 'eleve', ~User.id.in_(avec_classe)).all()}
+    return ids
+
+
+def prof_peut_voir_copie(prof, submission):
+    """Un prof voit une copie si le devoir appartient à l'une de ses classes ; pour un
+    ancien devoir sans classe, si l'élève est dans ses classes ou sans classe."""
+    devoir = db.session.get(Assignment, submission.assignment_id)
+    if devoir is None:
+        return False
+    if devoir.classroom_id is not None:
+        return devoir.classroom_id in {c.id for c in prof.classes_as_teacher}
+    return submission.student_id in ids_eleves_visibles_par_prof(prof)
+
+
+def devoirs_visibles_par_eleve(user):
+    """Devoirs des classes de l'élève + anciens devoirs sans classe."""
+    return Assignment.query.filter(
+        or_(Assignment.classroom_id.is_(None),
+            Assignment.classroom_id.in_(ids_classes_eleve(user)))
+    ).all()
+
+
 @app.route('/devoirs', methods=['GET', 'POST'])
 def devoirs():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    current_user = db.session.get(User, session['user_id'])
+
     # Si le prof crée un nouveau devoir
     if request.method == 'POST' and session['role'] == 'prof' and 'create_assignment' in request.form:
         title = request.form['title']
         description = request.form['description']
-        new_assignment = Assignment(title=title, description=description)
-        db.session.add(new_assignment)
+        classroom_id = request.form.get('classroom_id', type=int)
+
+        # Le devoir doit être destiné à l'une des classes DU prof.
+        if classroom_id not in {c.id for c in classes_du_prof(current_user)}:
+            flash("Choisissez l'une de vos classes pour publier ce devoir.", 'danger')
+            return redirect(url_for('devoirs'))
+
+        db.session.add(Assignment(title=title, description=description, classroom_id=classroom_id))
         db.session.commit()
         flash('Devoir créé !', 'success')
         return redirect(url_for('devoirs'))
 
-    # Récupération des données selon le rôle pour l'affichage
-    liste_devoirs = Assignment.query.all()
-    
-    # Pour le prof : voir toutes les copies rendues
-    # Pour le prof : voir uniquement les copies des élèves de ses classes
+    liste_devoirs = []
     rendus = []
+    mes_rendus = {}
+    classes_prof = []
+
     if session['role'] == 'prof':
-        current_teacher = User.query.get(session['user_id'])
-        
-        # On récupère les IDs de tous les élèves inscrits dans les classes de ce prof
-        allowed_student_ids = []
-        for classe in current_teacher.classes_as_teacher:
-            for student in classe.students:
-                if student.id not in allowed_student_ids:
-                    allowed_student_ids.append(student.id)
-        
-        # On filtre les soumissions pour n'avoir que celles de ces élèves
+        classes_prof = classes_du_prof(current_user)
+        ids_classes = [c.id for c in classes_prof]
+        visibles = ids_eleves_visibles_par_prof(current_user)
+
         rendus = db.session.query(Submission, User, Assignment).\
             join(User, Submission.student_id == User.id).\
             join(Assignment, Submission.assignment_id == Assignment.id).\
-            filter(Submission.student_id.in_(allowed_student_ids)).all()
-            
-    # Pour l'élève : voir ses propres rendus pour savoir s'il a déjà rendu ou s'il a une note
-    mes_rendus = {}
-    if session['role'] == 'eleve':
+            filter(or_(
+                Assignment.classroom_id.in_(ids_classes),
+                and_(Assignment.classroom_id.is_(None), Submission.student_id.in_(visibles)),
+            )).\
+            order_by(Submission.id.desc()).all()
+    else:
+        liste_devoirs = devoirs_visibles_par_eleve(current_user)
         sub_list = Submission.query.filter_by(student_id=session['user_id']).all()
-        # On crée un dictionnaire {assignment_id: objet_submission} pour l'interroger facilement dans le HTML
         mes_rendus = {sub.assignment_id: sub for sub in sub_list}
 
-    return render_template('devoirs.html', 
-                           liste_devoirs=liste_devoirs, 
-                           rendus=rendus, 
-                           mes_rendus=mes_rendus, 
+    return render_template('devoirs.html',
+                           liste_devoirs=liste_devoirs,
+                           rendus=rendus,
+                           mes_rendus=mes_rendus,
+                           classes_prof=classes_prof,
                            role=session['role'])
 
 
@@ -702,10 +756,16 @@ def rendre_devoir(assignment_id):
     if 'user_id' not in session or session['role'] != 'eleve':
         return redirect(url_for('login'))
 
+    # L'élève ne peut rendre que les devoirs de ses propres classes.
+    current_user = db.session.get(User, session['user_id'])
+    if assignment_id not in {d.id for d in devoirs_visibles_par_eleve(current_user)}:
+        flash("Ce devoir n'est pas destiné à votre classe.", 'danger')
+        return redirect(url_for('devoirs'))
+
     if 'file' not in request.files:
         flash('Aucun fichier détecté.', 'danger')
         return redirect(url_for('devoirs'))
-        
+
     file = request.files['file']
     if file.filename == '':
         flash('Aucun fichier sélectionné.', 'danger')
@@ -723,7 +783,7 @@ def rendre_devoir(assignment_id):
         else:
             submission = Submission(assignment_id=assignment_id, student_id=session['user_id'], filename=filename)
             db.session.add(submission)
-            
+
         db.session.commit()
         flash('Votre devoir a bien été envoyé !', 'success')
     else:
@@ -738,6 +798,9 @@ def noter_devoir(submission_id):
         return redirect(url_for('login'))
 
     submission = Submission.query.get_or_404(submission_id)
+    prof = db.session.get(User, session['user_id'])
+    if not prof_peut_voir_copie(prof, submission):
+        abort(403)
     grade = request.form.get('grade')
     comment = request.form.get('comment')
 
@@ -802,15 +865,29 @@ def messagerie():
 
 @app.route('/telecharger/<string:filename>')
 def telecharger_devoir(filename):
-    # Sécurité : On vérifie que l'utilisateur est bien connecté
     if 'user_id' not in session:
         return redirect(url_for('login'))
-        
-    # Envoi sécurisé du fichier depuis le dossier d'upload
+
+    # Le fichier doit correspondre à une copie connue, sinon on refuse.
+    submission = Submission.query.filter_by(filename=filename).first()
+    if submission is None:
+        abort(404)
+
+    current_user = db.session.get(User, session['user_id'])
+    if session['role'] == 'eleve':
+        # Un élève ne peut télécharger que sa propre copie.
+        autorise = submission.student_id == current_user.id
+    else:
+        # Un prof ne peut télécharger que les copies qu'il a le droit de voir.
+        autorise = prof_peut_voir_copie(current_user, submission)
+
+    if not autorise:
+        abort(403)
+
     return send_from_directory(
-        app.config['UPLOAD_FOLDER'], 
-        filename, 
-        as_attachment=True # Force le téléchargement plutôt que l'ouverture dans le navigateur
+        app.config['UPLOAD_FOLDER'],
+        filename,
+        as_attachment=True  # Force le téléchargement plutôt que l'ouverture dans le navigateur
     )
 
 @app.route('/register', methods=['GET', 'POST'])
